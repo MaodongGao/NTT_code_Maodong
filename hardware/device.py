@@ -1,61 +1,8 @@
-# ==================== Device.py ====================
-# File heads are executed when `import Device' is called.
-# the behavior of 'import' ensures logger only initialized once.
-# logger.handler enqueue ensures log file is not locked by other process.
-
-
-# Reconfigure logger
 import os, sys, warnings, inspect
 
 # ------------ Logger start ------------
-from loguru import logger
-
-def get_call_kwargs(level=1):
-    frame = inspect.currentframe().f_back
-    for _ in range(level):  # get the level-th frame
-        frame = frame.f_back
-    code_obj = frame.f_code
-    return dict(
-        function_module=os.path.basename(code_obj.co_filename),
-        function_name=code_obj.co_name,
-        function_line=frame.f_lineno,
-    )
-
-def send_log_file_via_email(fname):
-    pass
-    # import win32com.client
-    # ol = win32com.client.Dispatch('Outlook.Application')
-    # # size of the new email
-    # olmailitem = 0x0
-    # newmail = ol.CreateItem(olmailitem)
-    # newmail.Subject = '[Regular] [Keck LFC] log file rotated: ' + str(os.path.split(fname)[1])
-    # newmail.To = 'maodonggao@outlook.com'
-    # # newmail.CC='maodonggao@outlook.com'
-    # newmail.Body = '[Automatically Generated Email] \n\n' + 'Hello, \n\n Attached are the rotated data logging file at Keck. Email sent for backup only. \n\n Best, \n Maodong'
-
-    # newmail.Attachments.Add(fname)
-    # newmail.Send()
-    # print(f'Log file {fname} sent')
-
-fname = os.path.expanduser(r'~\Desktop\Logs\test.log')
-logger.remove()  # remove logger with default format
-logger_format = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    "<level>{level: <8}</level> | "
-    "<cyan>{extra[devicename]}</cyan> | "
-    "<cyan>{extra[function_module]}</cyan>:<cyan>{extra[function_name]}</cyan>:<cyan>{extra[function_line]}</cyan>\n"
-    "<level>{message}</level>")
-logger.add(sys.stderr, format=logger_format, level="INFO")  # recover console print
-logger.add(fname, format=logger_format, level="INFO", rotation="1 kB", retention=5, enqueue=True,
-           compression=send_log_file_via_email)  # 1MB per file, 5 files max
-logger.bind(devicename="Device").info('logger initialized', **get_call_kwargs(level=0))
-
-
-
-
-    
-
-
+from logger import LoggerClient, get_call_kwargs
+logger = LoggerClient()
 # ------------ Logger end ------------
 
 
@@ -72,8 +19,9 @@ class Device:
         if isVISA:
             try:
                 self.inst = self.rm.open_resource(addr)
-            except:  # TODO： raise warning (or error?) here to help identify visa object create failure.
-                pass
+            except Exception as e:
+                self.error(self.devicename + f": Error init device instance:{e}")
+                self.connected = False
 
     def connect(self):
         if not self.connected:
@@ -84,7 +32,7 @@ class Device:
                 self.info(self.devicename + " connected")
                 return 1
             except Exception as e:
-                self.error(f"Error:{e}")
+                self.error(self.devicename + f": Error connecting device:{e}")
                 return -1
         return 0
 

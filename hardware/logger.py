@@ -1,18 +1,25 @@
 from loguru import logger
-import os, sys, zmq, inspect, json
-from zmq.log.handlers import PUBHandler
-import time
+import os, sys, zmq, inspect, json, warnings
 logger_format = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
     "<cyan>{extra[devicename]}</cyan> | "
+    "procID <cyan>{extra[process_id]}</cyan> | "
     "<cyan>{extra[function_module]}</cyan>:<cyan>{extra[function_name]}</cyan>:<cyan>{extra[function_line]}</cyan>\n"
     "<level>{message}</level>")
 
 tcp_address = "tcp://127.0.0.1:12345"
 
-
 def get_call_kwargs(level=1):
+    '''
+    Get the function name, line number, and module name of the caller function
+    
+    Parameters:
+        level (int): the level of the caller function, default is 1
+        
+    Returns:
+        dict: a dictionary containing the function name, line number, and module name of the caller function
+    '''
     frame = inspect.currentframe().f_back
     for _ in range(level):  # get the level-th frame
         frame = frame.f_back
@@ -21,13 +28,143 @@ def get_call_kwargs(level=1):
         function_module=os.path.basename(code_obj.co_filename),
         function_name=code_obj.co_name,
         function_line=frame.f_lineno,
+        process_id=str(os.getpid()),
     )
+
+# def send_email(subject, mail_content, recv_address, attachment=None):
+#     '''
+#     Send email with attachment
+    
+#     Parameters:
+#         subject (str): email subject
+#         mail_content (str): email content in plain text
+#         recv_address (list): list of email addresses to receive the email, e.g. ["recipient1@example.com", "recipient2@example.com", "recipient3@example.com"]
+#         attachment (str): path to the attachment file, e.g. "C:/Users/username/Desktop/attachment.txt"
+
+#     '''
+#     import smtplib
+#     from email.mime.multipart import MIMEMultipart
+#     from email.mime.text import MIMEText
+#     from email.mime.application import MIMEApplication
+#     sender_address = 'maodongntt@gmail.com'
+#     sender_pass = 'dsyt xhmu rsjk vntj'
+
+#     to_string = ', '.join(recv_address)
+
+#     # Message initialization
+#     message = MIMEMultipart()
+#     message['From'] = sender_address
+#     message['To'] = to_string
+#     message['Subject'] = subject
+
+#     # Attach the attachment
+#     if attachment is not None:
+#         if os.path.isfile(attachment):
+#             with open(attachment, 'rb') as file:
+#                 part = MIMEApplication(file.read(), Name=os.path.basename(attachment))
+#             # After the file is closed
+#             part['Content-Disposition'] = f'attachment; filename="{os.path.basename(attachment)}"'
+#             message.attach(part)
+#         else:
+#             warnings.warn(f"Attachment file {attachment} does not exist. Email sent without attachment.")
+
+#     # Attach the mail content
+#     message.attach(MIMEText(mail_content, 'plain'))
+
+#     # SMTP session
+#     try:
+#         session = smtplib.SMTP('smtp.gmail.com', 587)
+#         session.starttls()
+#         session.login(sender_address, sender_pass)
+#         text = message.as_string()
+#         session.sendmail(sender_address, recv_address, text)
+#         print(f"Sent email to {recv_address} successfully.")
+#     except Exception as e:
+#         print(f"Failed to send email: {e}")
+#     finally:
+#         session.quit()
+#     print("send email FUNCTION CALLED")
+
+
+def send_email(subject, mail_content, recv_address, attachment=None, priority="Normal", is_html=False):
+    '''
+    Send email with attachment
+    
+    Parameters:
+        subject (str): email subject
+        mail_content (str): email content
+        recv_address (list): list of email addresses to receive the email, e.g. ["recipient1@example.com", "recipient2@example.com"]
+        attachment (str): path to the attachment file, e.g. "C:/Users/username/Desktop/attachment.txt"
+        priority (str): email priority, e.g. "Normal", "Urgent", "Non-Urgent"
+        is_html (bool): whether the email content is HTML formatted
+
+    '''
+    import smtplib
+    import os
+    import warnings
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+
+    sender_address = 'maodongntt@gmail.com'
+    sender_pass = 'dsyt xhmu rsjk vntj'
+
+    to_string = ', '.join(recv_address)
+
+    # Message initialization
+    message = MIMEMultipart()
+    message['From'] = sender_address
+    message['To'] = to_string
+    message['Subject'] = subject
+
+    # Set email priority
+    if priority.lower() == "urgent":
+        message['X-Priority'] = '1'  # Urgent
+    elif priority.lower() == "non-urgent":
+        message['X-Priority'] = '5'  # Non-Urgent
+    else:
+        message['X-Priority'] = '3'  # Normal
+
+    # Attach the attachment
+    if attachment is not None:
+        if os.path.isfile(attachment):
+            with open(attachment, 'rb') as file:
+                part = MIMEApplication(file.read(), Name=os.path.basename(attachment))
+            # After the file is closed
+            part['Content-Disposition'] = f'attachment; filename="{os.path.basename(attachment)}"'
+            message.attach(part)
+        else:
+            warnings.warn(f"Attachment file {attachment} does not exist. Email sent without attachment.")
+
+    # Attach the mail content
+    if is_html:
+        message.attach(MIMEText(mail_content, 'html'))
+    else:
+        message.attach(MIMEText(mail_content, 'plain'))
+
+    # SMTP session
+    try:
+        session = smtplib.SMTP('smtp.gmail.com', 587)
+        session.starttls()
+        session.login(sender_address, sender_pass)
+        text = message.as_string()
+        session.sendmail(sender_address, recv_address, text)
+        print(f"Sent email to {recv_address} successfully.")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+    finally:
+        session.quit()
+    print("send email FUNCTION CALLED")
 
 
 
 class LoggerClient:
     def __init__(self, init_logger=True) -> None:
         self.tcp_address = tcp_address
+        self.critical_warning_recipient =  [
+            "maodong.gao@ntt-research.com", 
+            "maodonggao@outlook.com"
+            ] # email address to send when a CRITICAL log is received
         if init_logger:
             self.__init_logger()
 
@@ -63,6 +200,64 @@ class LoggerClient:
 
     def critical(self, msg, name='', *args, **kwargs):
         self.log('CRITICAL', msg, name, *args, **kwargs)
+        self.__send_critical_email(msg, name, *args, **kwargs)
+
+    # def __send_critical_email(self, msg, name='', *args, **kwargs):
+    #     import platform
+    #     laptop_name = platform.node()
+    #     subject = "[CRITICAL][NTT-PHI-Lab] Critical warning on " + laptop_name
+    #     import time
+    #     from datetime import datetime
+    #     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #     mail_content = '[Automatically Generated Email] \n\n' + 'Hello, \n\nA CRITICAL warning was received from computer: ' + laptop_name + ' at '+ current_time + ', '+ time.strftime('%Z') +'. Please check your setup IMMEDIATELY.\n\n'
+    #     mail_content += '<b><font color="red">The CRITICAL warning message is:</font></b>\n'+ msg + '\n\nDevice name: ' + name + '\n\n'
+    #     trigger_info = get_call_kwargs(level=2)
+    #     mail_content += 'Triggered by: ' + trigger_info['function_module'] + ':' + trigger_info['function_name'] + ':' + str(trigger_info['function_line']) + '\n\n'
+    #     mail_content += 'Process ID: ' + trigger_info['process_id'] + '\n\n'
+    #     mail_content += 'This email is for CRITICAL warning notification only. \n\n Best, \n Maodong'
+    #     recv_address = self.critical_warning_recipient
+
+    #     try:
+    #         send_email(subject, mail_content, recv_address, priority="Urgent", is_html=True)
+    #         logger.bind(devicename="LoggerClient").info(f"Critical warning email sent to {recv_address}", **get_call_kwargs(level=0))
+    #     except Exception as e:
+    #         logger.bind(devicename="LoggerClient").error(f"Critical warning email failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
+    def __send_critical_email(self, msg, name='', *args, **kwargs):
+        import platform
+        laptop_name = platform.node()
+        subject = "[CRITICAL][NTT-PHI-Lab] Critical warning on " + laptop_name
+        import time
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        mail_content = f"""
+        <html>
+        <body>
+            <p>[Automatically Generated Email]</p>
+            <p>Hello,</p>
+            <p>A CRITICAL warning was received from computer: <strong>{laptop_name}</strong> at <strong>{current_time}, {time.strftime('%Z')}</strong>. Please check your setup IMMEDIATELY.</p>
+            <p><b><font color="red">The CRITICAL warning message is:</font></b> {msg}</p>
+            <p>Device name: {name}</p>
+        """
+
+        trigger_info = get_call_kwargs(level=2)
+        mail_content += f"""
+            <p>Triggered by: {trigger_info['function_module']}:{trigger_info['function_name']}:{str(trigger_info['function_line'])}</p>
+            <p>Process ID: {trigger_info['process_id']}</p>
+            <p>This email is for CRITICAL warning notification only.</p>
+            <p>Best regards,<br>Maodong</p>
+        </body>
+        </html>
+        """
+
+        recv_address = self.critical_warning_recipient
+
+        try:
+            send_email(subject, mail_content, recv_address, priority="Urgent", is_html=True)
+            logger.bind(devicename="LoggerClient").info(f"Critical warning email sent to {recv_address}", **get_call_kwargs(level=0))
+        except Exception as e:
+            logger.bind(devicename="LoggerClient").error(f"Critical warning email failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
+
+
 
 
 class LoggerServer:
@@ -101,58 +296,59 @@ class LoggerServer:
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
         
-    def __send_log_file_via_email(self, log_file_path):
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-        from email.mime.application import MIMEApplication
-        
+    def __send_log_file_via_email(self, log_file_path):        
         import platform
         laptop_name = platform.node()
         subject = "[Regular][NTT-PHI-Lab] log file rotated on " + laptop_name + ": " + str(os.path.split(log_file_path)[1])
         mail_content = '[Automatically Generated Email] \n\n' + 'Hello, \n\n Attached are the rotated data logging file at NTT-PHI-Lab. This log file is sent from computer: ' + laptop_name + '. \n\n This email is for log file backup purpose only. \n\n Best, \n Maodong'
         recv_address = self.email_recipient
 
-        sender_address = 'maodongntt@gmail.com'
-        sender_pass = 'dsyt xhmu rsjk vntj'
-
-        to_string = ', '.join(recv_address)
-
-        # Message initialization
-        message = MIMEMultipart()
-        message['From'] = sender_address
-        message['To'] = to_string
-        message['Subject'] = subject
-
-        # Attach the log file
-        if os.path.isfile(log_file_path):
-            with open(log_file_path, 'rb') as file:
-                part = MIMEApplication(file.read(), Name=os.path.basename(log_file_path))
-            # After the file is closed
-            part['Content-Disposition'] = f'attachment; filename="{os.path.basename(log_file_path)}"'
-            message.attach(part)
-
-        # Attach the mail content
-        message.attach(MIMEText(mail_content, 'plain'))
-
-        # SMTP session
         try:
-            session = smtplib.SMTP('smtp.gmail.com', 587)
-            session.starttls()
-            session.login(sender_address, sender_pass)
-            text = message.as_string()
-            session.sendmail(sender_address, recv_address, text)
-            print(f"Sent log file to {recv_address} successfully.")
+            send_email(subject, mail_content, recv_address, attachment=log_file_path, is_html=False)
             logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
         except Exception as e:
-            print(f"Failed to send email: {e}")
             logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
-        finally:
-            session.quit()
 
-        print("send log file via email FUNCTION CALLED")
+        # sender_address = 'maodongntt@gmail.com'
+        # sender_pass = 'dsyt xhmu rsjk vntj'
+
+        # to_string = ', '.join(recv_address)
+
+        # # Message initialization
+        # message = MIMEMultipart()
+        # message['From'] = sender_address
+        # message['To'] = to_string
+        # message['Subject'] = subject
+
+        # # Attach the log file
+        # if os.path.isfile(log_file_path):
+        #     with open(log_file_path, 'rb') as file:
+        #         part = MIMEApplication(file.read(), Name=os.path.basename(log_file_path))
+        #     # After the file is closed
+        #     part['Content-Disposition'] = f'attachment; filename="{os.path.basename(log_file_path)}"'
+        #     message.attach(part)
+
+        # # Attach the mail content
+        # message.attach(MIMEText(mail_content, 'plain'))
+
+        # # SMTP session
+        # try:
+        #     session = smtplib.SMTP('smtp.gmail.com', 587)
+        #     session.starttls()
+        #     session.login(sender_address, sender_pass)
+        #     text = message.as_string()
+        #     session.sendmail(sender_address, recv_address, text)
+        #     print(f"Sent log file to {recv_address} successfully.")
+        #     logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
+        # except Exception as e:
+        #     print(f"Failed to send email: {e}")
+        #     logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
+        # finally:
+        #     session.quit()
+
+        # print("send log file via email FUNCTION CALLED")
         
-        pass
+        # pass
 
 
 
