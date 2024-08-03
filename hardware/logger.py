@@ -69,7 +69,10 @@ class LoggerServer:
     def __init__(self) -> None:
         self.tcp_address = tcp_address
         self.logfile = os.path.join(os.path.expanduser('~'), 'Desktop', 'Logs', 'test_server.log')
-        self.email_recipient = "maodong.gao@ntt-research.com"  # email address to send log file when it is rotated
+        self.email_recipient = [
+            "maodong.gao@ntt-research.com", 
+            "maodonggao@outlook.com"
+            ] # email address to send log file when it is rotated
 
     def start(self):
         self.start_server()
@@ -103,8 +106,11 @@ class LoggerServer:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
         from email.mime.application import MIMEApplication
-        mail_content = "Please find the attached log file."
-        subject = "Log File Notification"
+        
+        import platform
+        laptop_name = platform.node()
+        subject = "[Regular][NTT-PHI-Lab] log file rotated on " + laptop_name + ": " + str(os.path.split(log_file_path)[1])
+        mail_content = '[Automatically Generated Email] \n\n' + 'Hello, \n\n Attached are the rotated data logging file at NTT-PHI-Lab. This log file is sent from computer: ' + laptop_name + '. \n\n This email is for log file backup purpose only. \n\n Best, \n Maodong'
         recv_address = self.email_recipient
 
         sender_address = 'maodongntt@gmail.com'
@@ -137,12 +143,15 @@ class LoggerServer:
             text = message.as_string()
             session.sendmail(sender_address, recv_address, text)
             print(f"Sent log file to {recv_address} successfully.")
+            logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
         except Exception as e:
             print(f"Failed to send email: {e}")
+            logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
         finally:
             session.quit()
 
         print("send log file via email FUNCTION CALLED")
+        
         pass
 
 
