@@ -1,7 +1,7 @@
 import os, sys, warnings, inspect
 
 # ------------ Logger start ------------
-from logger import LoggerClient, get_call_kwargs
+from .logger import LoggerClient, get_call_kwargs
 logger = LoggerClient()
 # ------------ Logger end ------------
 
@@ -71,4 +71,14 @@ class Device:
 
     def error(self, x, name='', level=1):
         logger.error(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        # raise Exception(x)
+        raise InstrExceptionByNTT(name + ': ' + x)
+
+    def critical(self, x, name='', level=1):
+        logger.critical(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        raise InstrExceptionByNTT(name + ': ' + x)
+
+
+class InstrExceptionByNTT(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)

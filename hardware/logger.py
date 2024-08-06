@@ -95,8 +95,8 @@ def send_email(subject, mail_content, recv_address, attachment=None, priority="N
         text = message.as_string()
         session.sendmail(sender_address, recv_address, text)
         print(f"Sent email to {recv_address} successfully.")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+    # except Exception as e:
+    #     print(f"Failed to send email: {e}")
     finally:
         session.quit()
     print("send email FUNCTION CALLED")
@@ -129,8 +129,9 @@ class LoggerClient:
     def __init__(self, init_logger=True) -> None:
         self.tcp_address = tcp_address
         self.critical_warning_recipient =  [
-            "maodong.gao@ntt-research.com", 
-            "maodonggao@outlook.com"
+            "maodong.gao@ntt-research.com", # always blocked? 
+            "maodonggao@outlook.com", # Need to add to white list
+            "gaomaodong@126.com"
             ] # email address to send when a CRITICAL log is received
         if init_logger:
             self.__init_logger()
@@ -229,8 +230,9 @@ class LoggerServer:
         self.tcp_address = tcp_address
         self.logfile = os.path.join(os.path.expanduser('~'), 'Desktop', 'Logs', 'test_server.log')
         self.email_recipient = [
-            "maodong.gao@ntt-research.com", 
-            "maodonggao@outlook.com"
+            "maodong.gao@ntt-research.com", # always blocked? 
+            "maodonggao@outlook.com", # Need to add to white list
+            "gaomaodong@126.com"
             ] # email address to send log file when it is rotated
 
     def start(self):
@@ -243,7 +245,7 @@ class LoggerServer:
         self.socket.subscribe("")
         logger.remove()
         logger.add(sys.stderr, format=logger_format, level="DEBUG")  # Add all levels to console
-        logger.add(self.logfile, format=logger_format, level="DEBUG", rotation="1 kB", retention=5, enqueue=True, compression=self.__send_log_file_via_email)
+        logger.add(self.logfile, format=logger_format, level="DEBUG", rotation="10 MB", retention=5, enqueue=True, compression=self.__send_log_file_via_email)
 
         logger.bind(devicename="LoggerServer").info("Logger server started at " + self.tcp_address, **get_call_kwargs(level=0))
         
