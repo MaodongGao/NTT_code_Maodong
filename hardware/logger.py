@@ -143,6 +143,8 @@ class LoggerClient:
         context = zmq.Context.instance()
         self.socket = context.socket(zmq.PUB)
         self.socket.connect(self.tcp_address)
+        import time
+        time.sleep(0.1)  # Wait for the connection to be established
         self.info("Logger client started at " + self.tcp_address, name="LoggerClient", **get_call_kwargs(level=0))
 
     def log(self, level, msg, name='', *args, **kwargs):

@@ -71,11 +71,11 @@ class Device:
 
     def error(self, x, name='', level=1):
         logger.error(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        raise InstrExceptionByNTT(name + ': ' + x)
+        # raise InstrExceptionByNTT(name + ': ' + x)
 
     def critical(self, x, name='', level=1):
         logger.critical(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        raise InstrExceptionByNTT(name + ': ' + x)
+        # raise InstrExceptionByNTT(name + ': ' + x)
 
 
 class InstrExceptionByNTT(Exception):

@@ -163,7 +163,7 @@ class YokogawaOSA(Device):
     def set_horizontal_unit(self, unit):
         try:
             unit = OSAHorizontalUnit(unit)
-            self.write(f":DISP:TRAC:X:UNIT {unit.name}")
+            self.write(f":UNIT:X {unit.value}")
             self.info(f'{self.devicename}: Set horizontal unit to {unit.name}')
         except Exception as e:
             self.error(f'{self.devicename}: Failed to set horizontal unit to {unit}. Error: {e}')
@@ -171,7 +171,7 @@ class YokogawaOSA(Device):
 
     def get_horizontal_unit(self):
         try:
-            unit_value = int(self.query(":DISP:TRAC:X:UNIT?"))
+            unit_value = int(self.query(":UNIT:X?"))
             return OSAHorizontalUnit.get_name(unit_value)
         except Exception as e:
             self.error(f'{self.devicename}: Failed to get horizontal unit. Error: {e}')
@@ -256,33 +256,40 @@ class YokogawaOSA(Device):
             )
         return trace
 
-    def get_XData(self, trace):
+    def get_XData(self, trace, logdata=True):
         """Retrieve X data (wavelengths) for the specified trace."""
         try:
             trace = self._validate_trace(trace)
-            return np.asarray(self.query(f'TRACE:X? {trace}').strip().split(','), dtype=float)
+            result = np.asarray(self.query(f':TRACE:X? TR{trace}').strip().split(','), dtype=float)/1e-9
+            if logdata:
+                result_str = np.array2string(result, separator=',', formatter={'float_kind': lambda x: f'{x:.2f}'}, threshold=np.inf, max_line_width=np.inf)
+                self.info(f'{self.devicename}: Retrieved X data for trace {trace} is:\n {result_str}')
+            return result
         except Exception as e:
             self.error(f'{self.devicename}: Failed to get X data for trace {trace}. Error: {e}')
             raise
 
-    def get_YData(self, trace):
+    def get_YData(self, trace, logdata=True):
         """Retrieve Y data (intensities) for the specified trace."""
         try:
             trace = self._validate_trace(trace)
-            return np.asarray(self.query(f'TRACE:Y? {trace}').strip().split(','), dtype=float)
+            result = np.asarray(self.query(f':TRACE:Y? TR{trace}').strip().split(','), dtype=float)
+            if logdata:
+                result_str = np.array2string(result, separator=',', formatter={'float_kind': lambda x: f'{x:.2f}'}, threshold=np.inf, max_line_width=np.inf)
+                self.info(f'{self.devicename}: Retrieved Y data for trace {trace} is:\n {result_str}')
+            return result
         except Exception as e:
             self.error(f'{self.devicename}: Failed to get Y data for trace {trace}. Error: {e}')
             raise
 
-    def get_trace(self, trace, plot=True, filename=None):
+    def get_trace(self, trace, plot=True, filename=None, logdata=True):
         """Retrieve both X and Y data for the specified trace and optionally plot it."""
         trace = self._validate_trace(trace)
-        wl = self.get_XData(trace)
-        intensity = self.get_YData(trace)
+        wl = self.get_XData(trace, logdata=logdata)
+        intensity = self.get_YData(trace, logdata=logdata)
 
         if plot:
             self.plot_trace(wl, intensity, trace, filename)
-
         return wl, intensity
 
     def plot_trace(self, wl, intensity, trace, filename=None):
@@ -303,7 +310,7 @@ class YokogawaOSA(Device):
         plt.show()
         self.info(self.devicename + ": Trace " + trace + " data is collected and shown in the plot.")
 
-    def save_trace(self, trace, filename, extensions=['.mat', '.txt', '.npy']):
+    def save_trace(self, trace, filename, extensions=['.mat', '.txt', '.npy'], plot=True, logdata=True):
         trace = self._validate_trace(trace)
 
         # Check if filename already has an extension
@@ -320,7 +327,7 @@ class YokogawaOSA(Device):
         filename = self._prepare_file(filename, extensions)
 
         # Read data
-        wl, intensity = self.get_trace(trace, plot=False)
+        wl, intensity = self.get_trace(trace, plot=plot, logdata=logdata)
 
         # Save data
         self._save_data(wl, intensity, filename, extensions)
@@ -486,6 +493,111 @@ class YokogawaOSA(Device):
         except Exception as e:
             self.error(f'{self.devicename}: Failed to get ref level in Watts. Error: {e}')
             raise
+
+    @property
+    def resolution_nm(self):
+        return self.get_resolution_nm()
+
+    @resolution_nm.setter
+    def resolution_nm(self, value):
+        self.set_resolution_nm(value)
+
+    @property
+    def wavelength_center_nm(self):
+        return self.get_wavelength_center_nm()
+
+    @wavelength_center_nm.setter
+    def wavelength_center_nm(self, value):
+        self.set_wavelength_center_nm(value)
+
+    @property
+    def wavelength_span_nm(self):
+        return self.get_wavelength_span_nm()
+
+    @wavelength_span_nm.setter
+    def wavelength_span_nm(self, value):
+        self.set_wavelength_span_nm(value)
+
+    @property
+    def wavelength_start_nm(self):
+        return self.get_wavelength_start_nm()
+
+    @wavelength_start_nm.setter
+    def wavelength_start_nm(self, value):
+        self.set_wavelength_start_nm(value)
+
+    @property
+    def wavelength_stop_nm(self):
+        return self.get_wavelength_stop_nm()
+
+    @wavelength_stop_nm.setter
+    def wavelength_stop_nm(self, value):
+        self.set_wavelength_stop_nm(value)
+
+    @property
+    def sensitivity(self):
+        return self.get_sensitivity()
+
+    @sensitivity.setter
+    def sensitivity(self, value):
+        self.set_sensitivity(value)
+
+    @property
+    def sampling_step_nm(self):
+        return self.get_sampling_step_nm()
+
+    @sampling_step_nm.setter
+    def sampling_step_nm(self, value):
+        self.set_sampling_step_nm(value)
+
+    @property
+    def sample_points(self):
+        return self.get_sample_points()
+
+    @sample_points.setter
+    def sample_points(self, value):
+        self.set_sample_points(value)
+
+    @property
+    def horizontal_unit(self):
+        return self.get_horizontal_unit()
+
+    @horizontal_unit.setter
+    def horizontal_unit(self, value):
+        self.set_horizontal_unit(value)
+
+    @property
+    def ref_level_dbm(self):
+        return self.get_ref_level_dbm()
+
+    @ref_level_dbm.setter
+    def ref_level_dbm(self, value):
+        self.set_ref_level_dbm(value)
+
+    @property
+    def ref_scale_db_per_div(self):
+        return self.get_ref_scale_db_per_div()
+
+    @ref_scale_db_per_div.setter
+    def ref_scale_db_per_div(self, value):
+        self.set_ref_scale_db_per_div(value)
+
+    @property
+    def unit(self):
+        return self.get_unit()
+
+    @unit.setter
+    def unit(self, value):
+        self.set_unit(value)
+
+    @property
+    def ref_level_w(self):
+        return self.get_ref_level_w()
+
+    @ref_level_w.setter
+    def ref_level_w(self, value):
+        self.set_ref_level_w(value)
+
 
 
 class OSASensitivity:
