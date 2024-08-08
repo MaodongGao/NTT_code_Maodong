@@ -1,7 +1,7 @@
 import os, sys, warnings, inspect
 
 # ------------ Logger start ------------
-from .logger import LoggerClient, get_call_kwargs
+from .utils.logger import LoggerClient, get_call_kwargs
 logger = LoggerClient()
 # ------------ Logger end ------------
 
@@ -58,24 +58,48 @@ class Device:
     logger = logger
     
     def debug(self, x, name='', level=1):
-        logger.debug(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        try:
+            logger.debug(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        except Exception as e:
+            print(x)
+            print("Logger error:", e)
         # print(x)
 
     def info(self, x, name='', level=1):
-        logger.info(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        # print(x)
+        try:
+            logger.info(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        except Exception as e:
+            print(x)
+            print("Logger error:", e)
+        
 
     def warning(self, x, name='', level=1):
-        logger.warning(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        warnings.warn(x)
+        try:
+            logger.warning(x, devicename=name or self.devicename, **get_call_kwargs(level))
+            warnings.warn(x)
+        except Exception as e:
+            print(x)
+            print("Logger error:", e)
+        # logger.warning(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        # warnings.warn(x)
 
     def error(self, x, name='', level=1):
-        logger.error(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        # raise InstrExceptionByNTT(name + ': ' + x)
+        # logger.error(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        # # raise InstrExceptionByNTT(name + ': ' + x)
+        try:
+            logger.error(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        except Exception as e:
+            print(x)
+            print("Logger error:", e)
 
     def critical(self, x, name='', level=1):
-        logger.critical(x, devicename=name or self.devicename, **get_call_kwargs(level))
-        # raise InstrExceptionByNTT(name + ': ' + x)
+        # logger.critical(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        # # raise InstrExceptionByNTT(name + ': ' + x)
+        try:
+            logger.critical(x, devicename=name or self.devicename, **get_call_kwargs(level))
+        except Exception as e:
+            print(x)
+            print("Logger error:", e)
 
 
 class InstrExceptionByNTT(Exception):

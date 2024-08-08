@@ -7,6 +7,7 @@ import os
 from scipy.interpolate import interp1d
 import warnings
 
+
 SLM_OK = 0
 
 class SLM:

@@ -3,9 +3,22 @@ import requests
 import numpy as np
 import matplotlib.pyplot as plt
 import json
+from .device import Device
 
-class waveshaper:
-    def __init__(self, config):
+
+class waveshaper(Device):
+    def __init__(self, addr="192.168.1.3", name='wsp', isVISA=False):
+        super().__init__(addr, name, isVISA)
+        config = {
+            "ip": self.addr,
+            "max_retries" : 4,
+            "retry_delay" : 0.5,
+            "timeout" : 3,
+            "frequency_step_THz" : 0.001,
+            "max_attenuation" : 50,
+            "startfreq_default": 187.275,
+            "stopfreq_default": 196.274
+            }
         self.ip = config['ip']
         self.max_retries = config['max_retries']
         self.retry_delay = config['retry_delay']
@@ -22,24 +35,57 @@ class waveshaper:
                 self.deviceinfo = response.json()
                 freq_start  = self.deviceinfo['startfreq']
                 freq_end    = self.deviceinfo['stopfreq']
-                print(f"Successfuly received device info from waveshaper model {self.deviceinfo['model']}")
+                self.info(self.devicename+f": Successfuly received device info from waveshaper model {self.deviceinfo['model']}")
                 break  # Success, exit the loop
             except requests.exceptions.Timeout:
-                print(f"Attempt {attempt+1}: The request timed out. Retrying in {self.retry_delay} seconds...")
+                self.info(self.devicename+": "+f"Attempt {attempt+1}: The request timed out. Retrying in {self.retry_delay} seconds...")
                 time.sleep(self.retry_delay)
             except requests.exceptions.HTTPError as err:
-                print(f"HTTP error occurred: {err}")
+                self.info(self.devicename+": "+f"During connection, HTTP error occurred: {err}")
                 break
             except requests.exceptions.RequestException as e:
-                print(f"An error occurred: {e}")
+                self.info(self.devicename+": "+f"An error occurred: {e}")
                 break
             attempt += 1
         else:
-            print("Max retries reached. Using the default frequency vector.")
+            self.warning(self.devicename+": Max retries reached. Using the default frequency vector.")
             freq_start  = self.deviceinfo['startfreq_default']
             freq_end    = self.deviceinfo['stopfreq_default']
 
         self.wsFreq = np.linspace(freq_start, freq_end, int((freq_end - freq_start) / self.frequency_step_THz + 1))
+
+    @property
+    def current_profile(self):
+        """Get the current profile from the waveshaper.
+        
+            Returns:
+                tuple: A tuple containing the frequency, 
+                                            attenuation, 
+                                            phase, 
+                                            and port values
+        """
+        url = f'http://{self.ip}/waveshaper/getprofile'
+        attempt = 0
+        while attempt <= self.max_retries:
+            try:
+                response = requests.get(url, timeout=self.timeout)
+                if response.status_code == 200:
+                    wspString = response.text
+                    wsFreq, wsAttn, wsPhase, wsPort = self.decode_wsp_string(wspString)
+                    return wsFreq, wsAttn, wsPhase, wsPort
+                else:
+                    self.info(self.devicename+": "+f"Get profile failed with status code: {response.status_code}")
+                    return None
+            except requests.exceptions.Timeout:
+                self.info(self.devicename+": "+f"Attempt {attempt+1}: Connection to the Waveshaper timed out. Retrying in {self.retry_delay} seconds...")
+                time.sleep(self.retry_delay)
+            except Exception as e:
+                self.info(self.devicename+": "+f"An error occurred: {e}")
+                return None
+            attempt += 1
+        else:
+            self.error(self.devicename+": "+"Max retries reached. Get profile failed.")
+            return None
 
     def create_wsp_string(self, wsAttn, wsPhase, wsPort):
         #creates the string that the waveshaper RESTful Interface can understand
@@ -56,9 +102,44 @@ class waveshaper:
             
             wspString += f"{wsFreq[i]:.4f}\t{wsAttn[i]:.4f}\t{wsPhase[i]:.4f}\t{wsPort[i]}\n"
         return wspString
+    
+    def create_wsp_string_totest(self, wsAttn, wsPhase, wsPort):
+        """Create the string that the waveshaper RESTful Interface can understand."""
+        wsFreq = self.wsFreq
+
+        # Ensure attenuation and phase values are within acceptable ranges
+        wsAttn = np.clip(np.nan_to_num(wsAttn, nan=60), 0, self.config["max_attenuation"])
+        wsPhase = np.nan_to_num(wsPhase, nan=0)
+
+        wspString = "\n".join(
+            f"{wsFreq[i]:.4f}\t{wsAttn[i]:.4f}\t{wsPhase[i]:.4f}\t{wsPort[i]}"
+            for i in range(len(wsFreq))
+        )
+        return wspString
+
+    def decode_wsp_string(self, wspString):
+        """Decode the string from Waveshaper.
+        Args:
+            wspString (str): The string from the Waveshaper.
+        Returns:
+            tuple: A tuple containing the frequency, attenuation, phase, and port values
+        """
+        wspList = wspString.split("\n")
+        wsFreq = []
+        wsAttn = []
+        wsPhase = []
+        wsPort = []
+        for line in wspList:
+            if line:
+                freq, attn, phase, port = line.split("\t")
+                wsFreq.append(float(freq))
+                wsAttn.append(float(attn))
+                wsPhase.append(float(phase))
+                wsPort.append(int(port))
+        return wsFreq, wsAttn, wsPhase, wsPort
+
 
     def upload_profile(self, wsAttn, wsPhase, wsPort, plot=False):
-        
         wspString = self.create_wsp_string(wsAttn, wsPhase, wsPort)
         data = {
             "type": "wsp",
@@ -94,6 +175,9 @@ class waveshaper:
             plt.tight_layout()
             plt.show()
 
+        # To test the plot_profile function
+        self.plot_profile(wsFreq, wsAttn, wsPhase, wsPort)
+
         attempt = 0
         while attempt <= self.max_retries:
             try:
@@ -116,6 +200,13 @@ class waveshaper:
             print("Max retries reached. Upload failed.")
             return None
 
+    def plot_current_profile(self, unit='THz'):
+        """Plot the current profile of the waveshaper.
+        Args:
+            unit (str): The unit of the frequency values, either 'THz' or 'nm'.
+        """
+        wsFreq, wsAttn, wsPhase, wsPort = self.current_profile
+        self.plot_profile(wsFreq, wsAttn, wsPhase, wsPort, unit)
 
     def reset(self, port):
         
@@ -125,3 +216,92 @@ class waveshaper:
         wsAttn  = np.zeros(len(wsFreq))
 
         self.upload_profile(wsAttn, wsPhase, wsPort, plot = False)
+
+    def plot_profile(self, wsFreq, wsAttn, wsPhase, wsPort, unit='THz'):
+        """Plot the profile of the waveshaper for all ports in one figure.
+        Args:
+            wsFreq (array): The frequency values.
+            wsAttn (array): The attenuation values.
+            wsPhase (array): The phase values.
+            wsPort (array): The port values.
+            unit (str): The unit of the frequency values, either 'THz' or 'nm'.
+        """
+        # Convert frequency to desired unit
+        # Validate the unit
+        if unit.lower() not in ['thz', 'nm']:
+            self.error(self.devicename+": "+f"Given plot unit: '{unit}' is invalid. Please use 'THz' or 'nm'. "+" Not plotting.")
+    
+        if unit.lower() == 'nm':
+            plot_x = np.array([self.thz2nm(f) for f in freq])
+            plot_x_label = "Wavelength (nm)"
+        else:
+            plot_x = freq
+            plot_x_label = "Frequency (THz)"
+
+        # Separate data by port
+        port_data = self.separate_by_port(wsFreq, wsAttn, wsPhase, wsPort)
+
+        # Create a new figure with two subplots
+        plt.figure(figsize=(14, 6))
+
+        # Plot frequency vs attenuation
+        plt.subplot(1, 2, 1)
+        for port, (freq, attn, _) in port_data.items():
+            plt.plot(plot_x, -attn, label=f'Port {port}', linestyle='-')
+        plt.xlabel(plot_x_label)
+        plt.ylabel('-Attenuation (dB)')
+        plt.grid(True)
+        plt.legend()
+
+        # Plot frequency vs phase
+        plt.subplot(1, 2, 2)
+        for port, (freq, _, phase) in port_data.items():
+            plt.plot(plot_x, phase, label=f'Port {port}', linestyle='-')
+        plt.xlabel(plot_x_label)
+        plt.ylabel('Phase (Degrees)')
+        plt.grid(True)
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+
+    def separate_by_port(self, wsFreq, wsAttn, wsPhase, wsPort):
+        """Separate data by port.
+        Args:
+            wsFreq (array): The frequency values.
+            wsAttn (array): The attenuation values.
+            wsPhase (array): The phase values.
+            wsPort (array): The port values.
+        Returns:
+            dict: A dictionary where keys are ports and values are tuples of (frequency, attenuation, phase).
+        """
+        port_data = {}
+        unique_ports = np.unique(wsPort)
+
+        for port in unique_ports:
+            indices = np.where(wsPort == port)
+            port_data[port] = (
+                wsFreq[indices],
+                wsAttn[indices],
+                wsPhase[indices]
+            )
+
+        return port_data
+
+
+    def nm2thz(self, nm):
+        return self.__nm2thz(nm)
+
+    def thz2nm(self, thz):
+        return self.__thz2nm(thz)
+
+    def __nm2thz(self, nm):
+        return Waveshaper.c_const / nm / 1000
+
+    def __thz2nm(self, thz):
+        return Waveshaper.c_const / thz / 1000
+    
+class Waveshaper(waveshaper): # For backwards compatibility with the old naming convention
+    def __init__(self, config):
+        super().__init__(config)

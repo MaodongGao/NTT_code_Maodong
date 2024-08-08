@@ -1,8 +1,10 @@
 import numpy as np
 import json
 import time
+import os
 import matplotlib.pyplot as plt
 from .NIT import NITLibrary_x64_320_py38 as NITLibrary
+from .device import Device
 
 #############################################################################
 #############################################################################
@@ -42,22 +44,107 @@ class myPyObserver(NITLibrary.NITUserObserver):
 #############################################################################
 #############################################################################
 
-class NITCam():
-    def __init__(self, config):
+class NITCam(Device):
+    def __init__(self, addr=None, name='NIT Camera', isVISA=False):
         """
         Initialize the NITCam with the given configuration.
         :param config: Configuration dictionary for the camera.
         """
-        self.config = config
+        super().__init__(addr, name, isVISA)
+        _default_config = {
+            "bitDepth": 14,
+            "ExposureTime": 4000,
+            "Analog_gain": "Low",
+            "FPS": 30,
+            "offset_x": 0,
+            "offset_y": 0,
+            "width": 1280,
+            "height": 1024,
+            "NUC_path": os.path.join(os.path.dirname(__file__), 'NUCs', 'NUC_4000us.yml')
+            #os.path.join(ConfigManager.PACKAGE_ROOT, 'hardware', 'NUCs', 'NUC_4000us.yml')
+            }
+        self.config = _default_config
         self.device = None
         self.nitManager = NITLibrary.NITManager.getInstance()
-        self.bitDepth = config.get('bitDepth', 14)  # Default to 14 if not provided
+        # self.bitDepth = _config.get('bitDepth', 14)  # Default to 14 if not provided
         self.frameObserver = myPyObserver()  # Observer for capturing frames
 
+    @property
+    def bitDepth(self):
+        return self.config.get('bitDepth', 14)
+    
+    @property
+    def exposure_time(self):
+        return self.get_exposuretime()
+    
+    @exposure_time.setter
+    def exposure_time(self, exposureTime):
+        self.set_exposuretime(exposureTime)
+
+    @property
+    def analog_gain(self):
+        return self.get_analog_gain()
+    
+    @analog_gain.setter
+    def analog_gain(self, analog_gain):
+        self.set_analog_gain(analog_gain)
+
+    @property
+    def offset_x(self):
+        return self.get_offset_x()
+    
+    @offset_x.setter
+    def offset_x(self, offset_x):
+        self.set_offset_x(offset_x)
+
+    @property
+    def offset_y(self):
+        return self.get_offset_y()
+    
+    @offset_y.setter
+    def offset_y(self, offset_y):
+        self.set_offset_y(offset_y)
+
+    @property
+    def frame_width(self):
+        return self.get_frame_width()
+    
+    @frame_width.setter
+    def frame_width(self, width):
+        self.set_frame_width(width)
+    
+    @property
+    def frame_height(self):
+        return self.get_frame_height()
+    
+    @frame_height.setter
+    def frame_height(self, height):
+        self.set_frame_height(height)
+
+    @property
+    def NUC_path(self):
+        return self.config['NUC_path']
+    
+    @NUC_path.setter
+    def NUC_path(self, nuc_path):
+        self.setNUCfile(nuc_path)
+
+    @property
+    def FPS(self):
+        return self.config['FPS']
+    
+    @FPS.setter
+    def FPS(self, fps):
+        self.device.setFps(fps) # UNTESTED
+        self.config['FPS'] = fps
 
 ########################################################
 #########     connect and disconnect
 ########################################################
+
+    def connect(self): 
+        # Ensure compatibility with the Device class
+        self.connectCam()
 
     def connectCam(self):
         """
@@ -65,7 +152,7 @@ class NITCam():
         """
         self.device = self.nitManager.openOneDevice()
         if self.device is None:
-            print("No device Connected")
+            self.info(self.devicename+": No device Connected")
             return False  # Or raise an exception
 
         # Connect to the camera using the given configuration settings
@@ -80,17 +167,17 @@ class NITCam():
         if self.config['FPS'] <= max_fps and self.config['FPS'] >= min_fps:
             self.device.setFps(self.config['FPS'])
         else:
-            print("Requested FPS is out of acceptable range. FPS set to max allowable FPS.")
+            self.warning(self.devicename+": Requested FPS is out of acceptable range. FPS set to max allowable FPS.")
             self.device.setFps(max_fps)
         
         # self.device.setNucFile(self.config['NUC_path'])
         # self.device.activateNuc()
 
         if self.device.connectorType() == NITLibrary.GIGE:
-            print("GIGE Camera Detected")
+            self.info(self.devicename+": GIGE Camera Detected")
             self.device.setParamValueOf("OutputType", "RAW")
         else:
-            print("USB Camera Detected")
+            self.info(self.devicename+": "+"USB Camera Detected")
 
         self.device.setParamValueOf("Analog Gain", self.config['Analog_gain'])
         # TODO: implement TEC here and in the config file
@@ -104,7 +191,7 @@ class NITCam():
         elif self.bitDepth == 14:
             self.device << self.frameObserver
 
-        print("Camera connected successfully.")
+        self.info(self.devicename+": "+"Camera connected successfully.")
         return True
 
     def disconnect(self):
@@ -112,6 +199,7 @@ class NITCam():
         Disconnect the camera and release resources.
         """
         self.nitManager.reset()
+        self.info(self.devicename+": "+"Camera disconnected.")
 
 ########################################################
 #########     set or get values of key camera parameters
@@ -124,7 +212,9 @@ class NITCam():
         """
         self.device.setParamValueOf("Exposure Time", exposureTime)
         self.device.updateConfig()
-        print("Exposure time set to", exposureTime, "ms")
+        self.info(self.devicename+": "+"Exposure time set to "
+                  + str(exposureTime) + "ms")
+        self.config['ExposureTime'] = exposureTime
         
     def get_exposuretime(self):
         return self.device.paramValueOf( "ExposureTime" ) 
@@ -136,7 +226,8 @@ class NITCam():
         self.device.setNucFile(nuc_path)
         self.device.activateNuc()
         self.device.updateConfig()
-        print("New NUC file set:", nuc_path)
+        self.info(self.devicename+": "+"New NUC file set: " + nuc_path)
+        self.config['NUC_path'] = nuc_path
 
     def set_frame_width(self, width):
         """
@@ -144,11 +235,11 @@ class NITCam():
         """
         self.device.setParamValueOf("Width", width)
         self.device.updateConfig()
-        print("Width set to", width)
+        self.info(self.devicename+": "+"Width set to "+ str(width))
+        self.config['width'] = width
     
     def get_frame_width(self):
         return self.device.paramValueOf( "Width" )
-    
 
     def set_frame_height(self, height):
         """
@@ -156,7 +247,8 @@ class NITCam():
         """
         self.device.setParamValueOf("Height", height)
         self.device.updateConfig()
-        print("Height set to", height)
+        self.info(self.devicename+": "+"Height set to "+ str(height))
+        self.config['height'] = height
     
     def get_frame_height(self):
         return self.device.paramValueOf( "Height" )
@@ -168,7 +260,8 @@ class NITCam():
         """
         self.device.setParamValueOf("OffsetX", offset_x)
         self.device.updateConfig()
-        print("X offset set to", offset_x, "pixels")
+        self.info(self.devicename+": "+"X offset set to " + str(offset_x)+ " pixels")
+        self.config['offset_x'] = offset_x
     
     def get_offset_x(self):
         return self.device.paramValueOf( "OffsetX" )
@@ -180,13 +273,14 @@ class NITCam():
         """
         self.device.setParamValueOf("OffsetY", offset_y)
         self.device.updateConfig()
-        print("Y offset set to", offset_y, "pixels")
+        self.info(self.devicename+": "+"Y offset set to "+ str(offset_y) + " pixels")
+        self.config['offset_y'] = offset_y
 
     def set_temperature(self, tec_mode, temperature):
             self.device.setParamValueOf( "Tec Mode", tec_mode )
             self.device.setParamValueOf( "Temperature Tec", temperature )
             self.device.updateConfig()
-            print("TEC mode set to " + str(tec_mode) + "and temp is set to " + str(temperature))
+            self.info(self.devicename+": "+"TEC mode set to " + str(tec_mode) + "and temp is set to " + str(temperature))
     
     def get_offset_y(self):
         return self.device.paramValueOf( "OffsetY" )
@@ -199,7 +293,8 @@ class NITCam():
         """
         self.device.setParamValueOf("Analog Gain", analog_gain)
         self.device.updateConfig()
-        print("analog gain set to", analog_gain)
+        self.info(self.devicename+": "+"analog gain set to "+ str(analog_gain))
+        self.config['Analog_gain'] = analog_gain
     
     def get_analog_gain(self):
         return self.device.paramValueOf( "Analog Gain" )
@@ -237,15 +332,14 @@ class NITCam():
         if self.device is not None:
             self.device.updateConfig()
             # Print confirmation message with the applied configuration
-            print("The following config successfully applied:")
-            print(json.dumps(new_config, indent=4))
+            self.info(self.devicename+": "+"The following config successfully applied:\n"+json.dumps(new_config, indent=4))
         else:
-            print("Camera device is not initialized. Please connect the camera first.")
-
+            self.info(self.devicename+": "+"Camera device is not initialized. Please connect the camera first.")
+        
 
     def clearFrames(self):
         self.frameObserver.clearFrame()
-        print("Cleared all frames.")
+        self.info(self.devicename+": "+"Cleared all frames.")
 
 ############################################################
 ##############         Methods for capturing frames

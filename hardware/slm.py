@@ -6,50 +6,112 @@ from .santec import _slm_win as slm # Import the vendor-specific SLM functions
 import os
 from scipy.interpolate import interp1d
 import warnings
+from .device import Device
 
-SLM_OK = 0
+from .utils.grid_config import GridConfig
 
-class SLM:
-    def __init__(self, config, SLM_number):
+SLM_OK = 0 # SLM return code for success
+
+class SLM(Device):
+    def __init__(self, SLM_number, name = None, isVISA=False):
         """
-        Initialize the SLM object with configuration settings.
-        :param config: A dictionary containing configuration settings for all SLMs.
-        :param SLM_number: The number of the specific SLM device to configure.
+        Initialize the SLM device.
         """
-        self.config = config
-        self.SLM_number = SLM_number
-        self.csv_directory = self.config['csv_directory']
-        self.csv_filename = self.config["csv_filename"]
-        self.slm_height = self.config['slm_height']
-        self.slm_width = self.config['slm_width']
+        if name is None:
+            name = f"SLM{SLM_number}"
 
-        self.lookuptable_csv_path = f"{self.csv_directory}\\{self.config['lookuptable_csv_path']}"
+        super().__init__(addr=SLM_number, name=name, isVISA=isVISA)
+        # self.config = config
+        self.SLM_number = self.addr
+        self.csv_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'slm_csv_files')
+        self.csv_filename = "csvfile" + str(self.SLM_number) + ".csv"
+        self.slm_height = 1200
+        self.slm_width = 1920
+        self.lookuptable_csv_path = os.path.join(self.csv_directory, "r_vs_phase_slm" + str(self.SLM_number) + ".csv")
         
-        lookup_table = np.genfromtxt(self.lookuptable_csv_path, delimiter=',', skip_header=1)
-        # Extract phases and attenuations
-        self.LUT_phase = lookup_table[:, 0]  # Assuming phase is in the first column
-        self.LUT_reflection = lookup_table[:, 1]  # Assuming attenuation is in the second column
-        # Create an interpolation function from attenuation to phase
-        # We're flipping slm_phase and slm_attn because we want to find phase for a given attenuation
-        self.phase_interp_func = interp1d(self.LUT_reflection, self.LUT_phase, kind='linear', bounds_error=False, fill_value="extrapolate")
+        # self.connect()
+        # self.set_wavelength_nm()
 
-        self.zero_reflection_phase = self.LUT_phase[0]
+        self._grid_config = GridConfig() # dictionary like object for grid configuration
 
-        slm.SLM_Ctrl_Close(self.SLM_number)
+    def update_grid_config(self, params):
+        self._grid_config.update(params)
+        self.info(self.devicename + ': Grid configuration updated to:\n' + str(self.grid_config))
+
+    @property
+    def grid_config(self):
+        return self._grid_config
+
+    def set_wavelength_nm(self, wavelength=1500):
+        """
+        Set the wavelength for the SLM.
+        """
+        # Set wavelength
+        ret = slm.SLM_Ctrl_WriteWL(self.SLM_number, wavelength, 200)
+        # Save wavelength
+        ret = slm.SLM_Ctrl_WriteAW(self.SLM_number)
+        if ret == SLM_OK:
+            self.info(self.devicename + f": Wavelength set to {wavelength} nm.")
+        else:
+            self.error(self.devicename + f": Error setting wavelength to {wavelength} nm.")
+        return ret
+    
+    def connect(self):
+        slm.SLM_Ctrl_Close(self.SLM_number) # TODO: is this line necessary?
         ret = slm.SLM_Ctrl_Open(self.SLM_number)
         if ret == SLM_OK:
-            print('SLM' + str(self.SLM_number) + ' successfully initialized.')
+            self.connected = True
+            self.info(self.devicename +': SLM' + str(self.SLM_number) + ' successfully initialized.')
+            return 1
+        else:
+            self.error(self.devicename +': Error connecting to SLM' + str(self.SLM_number))
+            return -1
 
-        setwl = 0
-        if setwl == 1:
-            # set wavelength
-            ret = slm.SLM_Ctrl_WriteWL(self.SLM_number,1500,200)
-            
-            #save wavelength
-            ret = slm.SLM_Ctrl_WriteAW(self.SLM_number)
+    def disconnect(self):
+        slm.SLM_Ctrl_Close(self.SLM_number)
+        self.connected = False
+        self.info(self.devicename +': SLM' + str(self.SLM_number) + ' disconnected.')
+
+    @property
+    def lookup_table(self):
+        '''
+        Returns the lookup table for the SLM
+        Assumes the lookup table is in the format of a CSV file with two columns: phase and reflection
+        '''
+        lookup_table = np.genfromtxt(self.lookuptable_csv_path, delimiter=',', skip_header=1)
+        return lookup_table
     
+    @property
+    def LUT_phase(self):
+        '''
+        Returns the phase values from the lookup table
+        Assumes the first column of the lookup table is the phase values
+        '''
+        return self.lookup_table[:, 0]
+    
+    @property
+    def LUT_reflection(self):
+        '''
+        Returns the reflection values from the lookup table
+        Assumes the second column of the lookup table is the reflection values
+        '''
+        return self.lookup_table[:, 1]
+    
+    @property
+    def phase_interp_func(self):
+        '''
+        Returns an interpolation function for the lookup table
+        Return:
+            interp1d: An interpolation function that maps reflection values to phase values
+        '''
+        return interp1d(self.LUT_reflection, self.LUT_phase, kind='linear', bounds_error=False, fill_value="extrapolate")
 
-
+    @property
+    def zero_reflection_phase(self):
+        '''
+        Returns the phase value corresponding to zero reflection
+        '''
+        return self.LUT_phase[0]
 
 ##########################################################
 #############      Basic functions
@@ -110,7 +172,7 @@ class SLM:
 ##########################################################
     def update_zero_reflection_phase(self,new_phase):
         self.zero_reflection_phase = new_phase
-        print('Zero-reflection phase on SLM' + str(self.SLM_number + 'updated to' + str(new_phase)))
+        self.info(self.devicename + ': Zero-reflection phase updated to ' + str(new_phase))
     
     def generate_csv_from_phase_mask(self, phase_mask):
         """
@@ -124,13 +186,13 @@ class SLM:
         #base_path = os.path.dirname(os.path.abspath(__file__))
         #csv_path = os.path.join(base_path, 'config', 'config.json')
         filepath = f"{self.csv_directory}\\{self.csv_filename}"
-        # print(filepath)
+        # self.info(self.devicename+filepath)
         with open(filepath, 'w', encoding='cp1252') as file:
             file.write("Y/X," + ','.join(map(str, range(1920))) + '\n')
             for idx, row in enumerate(phase_mask):
                 line = str(idx) + ',' + ','.join(map(str, row.astype(int))) + '\n'
                 file.write(line)
-        #print("CSV file saved in " + filepath)
+        #self.info(self.devicename+": CSV file saved in " + filepath)
         return filepath
 
 
@@ -144,7 +206,7 @@ class SLM:
         self.upload_csv_memory_mode(csvfilepath)
 
 
-    def embed_matrix(self, matrix, params, plot=False):
+    def embed_matrix(self, matrix, params=None, plot=False):
         """
     Generates a display of Nx by Ny pixels to show a matrix of size (sx,sy) on this display.
     Each matrix element is represented by a rectangular region of nx by ny pixels, separated by guard pixels.
@@ -155,11 +217,24 @@ class SLM:
     :param plot: Boolean indicating whether to plot the display matrix as a heatmap.
     :return: The display matrix as a numpy array.
         """
-    # Extract parameters
+        self.info(self.devicename + ": Calculating Embedding matrix on SLM" + str(self.SLM_number) + ".")
+        if isinstance(params, dict):
+            self.update_grid_config(params)
+        elif params is None:
+            self.info(self.devicename + ": Current grid configuration is:\n" + str(self.grid_config))
+            pass
+        else:
+            raise TypeError("Parameters must be a dictionary or None.")
+        
+        params = self.grid_config
+        if params.has_missing_keys():
+            raise Exception(f"Missing grid configuration parameters {self.grid_config.missing_keys()}. Please provide all necessary parameters.")
+
+        # Extract parameters
         slm_width = self.slm_width
         slm_height = self.slm_height
         elem_width = params["elem_width"]
-        elem_height = params["elem_height"] 
+        elem_height = params["elem_height"]
         gap_x = params["gap_x"]
         gap_y = params["gap_y"]
         topleft_x = params["topleft_x"]

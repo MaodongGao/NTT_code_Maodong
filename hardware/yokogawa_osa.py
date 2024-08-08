@@ -11,25 +11,14 @@ class YokogawaOSA(Device):
     def __init__(self, addr='GPIB0::1::INSTR', name="OSA"):
         super().__init__(addr=addr, name=name)
 
-        # Dictionary for default device settings
-        defaults = {
-            "activation_timeout": 3,  # Time to wait for device activation/deactivation in seconds
-            "timeout": 25000,  # Communication timeout in ms
-            "baud_rate": 19200,  # Baud rate for communication
-            "read_termination": '',  # Read termination
-            "write_termination": '',  # Default is '\r\n'
-            "wavelength_prec_nm": '0.00',  # Wavelength precision up to 2 decimal places
-            "available_traces": ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
-        }
-
-        # Apply defaults
-        self.__activation_timeout = defaults["activation_timeout"]
-        self.inst.timeout = defaults["timeout"]
-        self.inst.baud_rate = defaults["baud_rate"]
-        self.inst.read_termination = defaults["read_termination"]
-        self.inst.write_termination = defaults["write_termination"]
-        self.__wavelength_prec_nm = defaults["wavelength_prec_nm"]
-        self.__available_traces = defaults["available_traces"]
+        # Default device settings
+        self.__activation_timeout = 3  # Time to wait for device activation/deactivation in seconds
+        self.inst.timeout = 25000  # Communication timeout in ms
+        self.inst.baud_rate = 19200  # Baud rate for communication
+        self.inst.read_termination = ''  # Read termination
+        self.inst.write_termination = ''  # Default is '\r\n'
+        self.__wavelength_prec_nm = '0.00'  # Wavelength precision up to 2 decimal places
+        self.__available_traces = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
         self.osaacquiring = False
 
     def set_resolution_nm(self, resolution_nm):

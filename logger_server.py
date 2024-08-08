@@ -1,2 +1,2 @@
-from hardware.logger import LoggerServer
+from hardware.utils.logger import LoggerServer
 LoggerServer().start()
