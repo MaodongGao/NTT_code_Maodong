@@ -41,6 +41,21 @@ class SLM(Device):
     @property
     def grid_config(self):
         return self._grid_config
+    
+    @grid_config.setter
+    def grid_config(self, params):
+        self.update_grid_config(params)
+
+    @property
+    def config(self):
+        return {
+            "slm_num": self.SLM_number,
+            "slm_height": self.slm_height,
+            "slm_width": self.slm_width,
+            "csv_filename": self.csv_filename,
+            "lookuptable_csv_path": self.lookuptable_csv_path,
+            "csv_directory": self.csv_directory
+        }
 
     def set_wavelength_nm(self, wavelength=1500):
         """

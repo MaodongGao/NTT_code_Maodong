@@ -9,6 +9,7 @@ from .device import Device
 class waveshaper(Device):
     def __init__(self, addr="192.168.1.3", name='wsp', isVISA=False):
         super().__init__(addr, name, isVISA)
+        self.c_const = 299792458  # Speed of light in m/s
         config = {
             "ip": self.addr,
             "max_retries" : 4,
@@ -24,6 +25,9 @@ class waveshaper(Device):
         self.retry_delay = config['retry_delay']
         self.timeout     = config['timeout']
         self.frequency_step_THz = config['frequency_step_THz']
+        self.max_attenuation = config['max_attenuation']
+        self.startfreq_default = config['startfreq_default']
+        self.stopfreq_default = config['stopfreq_default']
         
         # Query device frequency grid using the waveshaper RESTful Interface
         attempt = 0
@@ -33,8 +37,8 @@ class waveshaper(Device):
                 response = requests.get(url, str(self.timeout))
                 response.raise_for_status()
                 self.deviceinfo = response.json()
-                freq_start  = self.deviceinfo['startfreq']
-                freq_end    = self.deviceinfo['stopfreq']
+                self.freq_start  = self.deviceinfo['startfreq']
+                self.freq_end    = self.deviceinfo['stopfreq']
                 self.info(self.devicename+f": Successfuly received device info from waveshaper model {self.deviceinfo['model']}")
                 break  # Success, exit the loop
             except requests.exceptions.Timeout:
@@ -49,10 +53,35 @@ class waveshaper(Device):
             attempt += 1
         else:
             self.warning(self.devicename+": Max retries reached. Using the default frequency vector.")
-            freq_start  = self.deviceinfo['startfreq_default']
-            freq_end    = self.deviceinfo['stopfreq_default']
+            # freq_start  = self.deviceinfo['startfreq_default']
+            # freq_end    = self.deviceinfo['stopfreq_default']
+            self.freq_start = self.startfreq_default
+            self.freq_end = self.stopfreq_default
 
-        self.wsFreq = np.linspace(freq_start, freq_end, int((freq_end - freq_start) / self.frequency_step_THz + 1))
+        # self.wsFreq = np.linspace(freq_start, freq_end, int((freq_end - freq_start) / self.frequency_step_THz + 1))
+    
+    def connect(self):
+        print("WaveShaper through ip , no need to connect")
+        pass
+    
+    def disconnect(self):
+        print("WaveShaper through ip , no need to disconnect")
+        pass
+
+    @property
+    def wsFreq(self):
+        return np.linspace(self.freq_start, self.freq_end, int((self.freq_end - self.freq_start) / self.frequency_step_THz + 1))
+
+    @property
+    def config(self):
+        return {'ip': self.ip,
+                'max_retries': self.max_retries,
+                'retry_delay': self.retry_delay,
+                'timeout': self.timeout,
+                'frequency_step_THz': self.frequency_step_THz,
+                'max_attenuation': self.max_attenuation,
+                'startfreq_default': self.startfreq_default,
+                'stopfreq_default': self.stopfreq_default}
 
     @property
     def current_profile(self):
@@ -217,6 +246,7 @@ class waveshaper(Device):
 
         self.upload_profile(wsAttn, wsPhase, wsPort, plot = False)
 
+    ### Maodong added 
     def plot_profile(self, wsFreq, wsAttn, wsPhase, wsPort, unit='THz'):
         """Plot the profile of the waveshaper for all ports in one figure.
         Args:
@@ -289,6 +319,85 @@ class waveshaper(Device):
 
         return port_data
 
+  ################################################
+  ##########  Methods for spectral shaping
+  ################################################
+
+    def flatten_comb(self, spectrum_X, spectrum_Y, target_intensity, waveshaper_port, plot = False, spectrum_unit='m'):
+
+        # c = 299792458  # Speed of light in m/s
+        # # Convert wavelength (m) to frequency (THz)
+        # osaFreq = (c / (np.array(spectrum_X) )) / 1e12
+
+        if spectrum_unit.lower() == 'nm':
+            spectrum_X = self.nm2thz(np.array(spectrum_X))
+        elif spectrum_unit.lower() == 'm':
+            spectrum_X = np.array(spectrum_X) / 1e-9 # Convert m to nm
+            return self.flatten_comb(spectrum_X, spectrum_Y, target_intensity, waveshaper_port, plot, spectrum_unit='nm')
+        elif spectrum_unit.lower() == 'thz':
+            spectrum_X = np.array(spectrum_X)
+        else:
+            self.error(self.devicename+": "+f"Given spectrum unit: '{spectrum_unit}' is invalid in flatten_comb. Please use 'THz' or 'nm'. ")
+        
+        # After this, make sure spectrum_X is in THz
+        osaFreq = spectrum_X
+
+        from scipy.interpolate import interp1d
+        # Interpolate the OSA spectrum onto the waveshaper frequency grid. Assign NaN to points outside OSA spectrum
+        interp_func     = interp1d(osaFreq, spectrum_Y, bounds_error=False, fill_value=np.nan)
+        osaFreq_interp   = interp_func(self.wsFreq)
+        
+        # Identify and remove NaN values
+        valid_indices = ~np.isnan(osaFreq_interp)
+        maskFreq      = self.wsFreq[valid_indices]
+
+        # Calculate attenuation needed to flatten the spectrum
+        maskAttn = osaFreq_interp[valid_indices] - target_intensity
+        if np.any(maskAttn < 0):
+            self.warning(self.devicename+": "+"Some points required negative attenuation and were set to 0. Check target intensity levels.")
+            # warnings.warn("Some points required negative attenuation and were set to 0. Check target intensity levels.")
+        maskAttn[maskAttn < 0] = 0  # Set negative attenuation values to 0
+
+
+        # Calculate the WS masks
+        wsAttn = np.full(self.wsFreq.shape, self.max_attenuation)  # Default attenuation value
+        wsPhase = np.zeros(self.wsFreq.shape)    # Phase is zero for all frequencies
+        wsPort = np.full(self.wsFreq.shape, waveshaper_port)  # Port is constant for all frequencies
+
+        # Ensure maskFreq and maskAttn are arrays without NaN values (from previous steps)
+        # Calculate the index for minimum frequency difference
+        print(type(maskFreq))
+        print((maskFreq))
+        idx_f_min = np.argmin(np.abs(np.array(self.wsFreq) - np.min(maskFreq)))
+
+        # Calculate bandwidth in terms of array size
+        BW = len(maskAttn)
+        # Update the attenuation values in the waveshaper range
+        wsAttn[idx_f_min:idx_f_min+BW] = maskAttn
+
+
+        if plot:
+            # Waveshaper frequency grid to wavelength
+            # wsLambda = c / (self.waveshaper.wsFreq * 1e9) * 1e9  # Convert GHz to Hz, then to m, and finally to nm
+            wsLambda = self.thz2nm(self.wsFreq)  # Convert THz to nm
+            maskLambda = wsLambda[valid_indices]  # Corresponding wavelengths
+
+            # Plotting
+            plt.figure(figsize=(12, 6))
+            # Plot original spectrum (wavelength vs amplitude)
+            plt.plot(spectrum_X, spectrum_Y, label='Original Spectrum')
+            # Plot the attenuation mask (converted to wavelength vs attenuation)
+            # Invert maskAttn for visualization purposes (attenuation decreases the amplitude)
+            plt.plot(maskLambda, -maskAttn, 'r--', label='Attenuation Mask')
+
+            plt.xlabel('Wavelength (nm)')
+            plt.ylabel('Amplitude / Attenuation')
+            plt.title('Spectrum and Attenuation Mask')
+            plt.legend()
+            plt.grid(True)
+            plt.show()
+
+        return self.wsFreq, wsAttn, wsPhase, wsPort
 
     def nm2thz(self, nm):
         return self.__nm2thz(nm)
@@ -297,10 +406,10 @@ class waveshaper(Device):
         return self.__thz2nm(thz)
 
     def __nm2thz(self, nm):
-        return Waveshaper.c_const / nm / 1000
+        return waveshaper.c_const / nm / 1000
 
     def __thz2nm(self, thz):
-        return Waveshaper.c_const / thz / 1000
+        return waveshaper.c_const / thz / 1000
     
 class Waveshaper(waveshaper): # For backwards compatibility with the old naming convention
     def __init__(self, config):

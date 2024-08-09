@@ -7,6 +7,8 @@ from scipy.io import savemat
 from astropy.io import fits
 import time
 
+C_CONST = 299792458  # Speed of light in m/s
+
 class YokogawaOSA(Device):
     def __init__(self, addr='GPIB0::1::INSTR', name="OSA"):
         super().__init__(addr=addr, name=name)
@@ -586,6 +588,30 @@ class YokogawaOSA(Device):
     @ref_level_w.setter
     def ref_level_w(self, value):
         self.set_ref_level_w(value)
+
+    @classmethod
+    def get_comb_peak_spec(self, 
+                           spec_nm, spec_dbm, fsr_Ghz, 
+                           spec_dbm_noise = -40, plot=False):
+        """Get the combined peak spectrum."""
+
+        osa_wl_center = np.mean(spec_nm)
+        fsr_nm = osa_wl_center - 1/(1/osa_wl_center + fsr_Ghz/C_CONST)
+        wl_increment = np.mean(np.diff(spec_nm))
+        min_distance = fsr_nm / wl_increment
+        from scipy.signal import find_peaks
+        peaks, _ = find_peaks(spec_dbm, height=spec_dbm_noise, distance=0.9*min_distance)
+
+        if plot:
+            plt.figure()
+            plt.plot(spec_nm, spec_dbm)
+            plt.plot(spec_nm[peaks], spec_dbm[peaks], "x")
+            plt.xlabel('Wavelength (nm)')
+            plt.ylabel('Intensity (dBm)')
+            plt.ylim(bottom=spec_dbm_noise)
+            plt.show()
+        return spec_nm[peaks], spec_dbm[peaks]
+
 
 
 

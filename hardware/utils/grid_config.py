@@ -1,3 +1,6 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 class GridConfig(dict):
     # Define keys for grid configuration, inherit dict to allow dictionary-like access, such as config['key']
@@ -53,5 +56,46 @@ class GridConfig(dict):
         # Return the string representation of the configuration
         return '\n'.join([f"{key}: {value}" for key, value in self.clean_dict.items()])
 
-    
+    # methods to plot images given the configuration
+    # this code was adapted from systemcontroller.py(deprecated)
+    @classmethod
+    def plot_rect_array(self, img, grid_config=None):
+        if grid_config is None:
+            grid_config = self.clean_dict
+
+        N           =   [grid_config["matrixsize_0"], grid_config["matrixsize_1"]]
+        topleft     =   np.array([grid_config["topleft_x"], grid_config["topleft_y"]])
+        elem_size   =   np.array([grid_config["elem_width"], grid_config["elem_height"]])
+        gap         =   np.array([grid_config["gap_x"], grid_config["gap_y"]])
+
+        fig, ax = plt.subplots()
+        plt.imshow(img, cmap='gray')
+        for n0 in range(N[0]):
+            for n1 in range(N[1]):
+                topleft_ij  = topleft + (elem_size + gap)*np.array([n1, n0])
+                rect        = patches.Rectangle(topleft_ij, elem_size[0], elem_size[1], linewidth=1, edgecolor='r', facecolor='none')
+                ax.add_patch(rect)
+        plt.show()
+
+    @classmethod
+    def plot_rect_array_nonuniform(self, img, grid_config=None):
+        if grid_config is None:
+            grid_config = self.clean_dict
+
+        N           =   [grid_config["matrixsize_0"], grid_config["matrixsize_1"]]
+        topleft     =   np.array([grid_config["topleft_x"], grid_config["topleft_y"]])
+        elem_size   =   np.array([grid_config["elem_width"], grid_config["elem_height"]])
+        gap         =   np.array([grid_config["gap_x"], grid_config["gap_y"]])
+        offset_x = np.array(grid_config["offset_x"]).T
+        offset_y = np.array(grid_config["offset_y"]).T 
+
+        fig, ax = plt.subplots()
+        plt.imshow(img, cmap='gray')
+        for n0 in range(N[0]):
+            for n1 in range(N[1]):
+                topleft_ij  = topleft + (elem_size + gap)*np.array([n1, n0])
+                rect        = patches.Rectangle(topleft_ij + np.array([offset_x[n1,n0], offset_y[n1,n0]]), elem_size[0], elem_size[1], linewidth=1, edgecolor='r', facecolor='none')
+                # print(np.array([offset_x[n1,n0], offset_y[n1,n0]]))
+                ax.add_patch(rect)
+        plt.show()
 
