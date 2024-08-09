@@ -1,22 +1,28 @@
-# Add hardware folder to the path
+# Add the parent directory to the path so that the imports work
+
+import os
 import sys
-sys.path.append('../hardware')
+if os.path.dirname(os.path.dirname(os.path.abspath(__file__))) not in sys.path: 
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from typing import Optional
+
 import numpy as np
 from scipy.io import savemat
 
-from ..hardware.camera import NITCam
-from ..hardware.waveshaper import Waveshaper
-from ..hardware.slm import SLM
-from ..hardware.yokogawa_osa import YokogawaOSA
+from hardware.camera import NITCam
+from hardware.waveshaper import Waveshaper
+from hardware.slm import SLM
+from hardware.yokogawa_osa import YokogawaOSA
 
-from ..hardware.device import Device # Create dummy device for logging
+from hardware.device import Device # Create dummy device for logging
 
 class MatrixMultiplier:
-    def __init__(self, slm1: SLM|None, 
-                 slm2: SLM|None, 
-                 cam: NITCam|None, 
-                 osa: YokogawaOSA|None,
-                 ws: Waveshaper|None):
+    def __init__(self, slm1: Optional[SLM],
+                    slm2: Optional[SLM],
+                    cam: Optional[NITCam],
+                    osa: Optional[YokogawaOSA],
+                    ws: Optional[Waveshaper]):
         self.slm1 = slm1
         self.slm2 = slm2
         self.cam = cam
@@ -43,11 +49,11 @@ class MatrixMultiplier:
     @property
     def SysCont(self):
         class SystemController:
-            def __init__(self, slm1: SLM|None, 
-                         slm2: SLM|None, 
-                         cam: NITCam|None, 
-                         osa: YokogawaOSA|None,
-                         ws: Waveshaper|None):
+            def __init__(self, slm1: Optional[SLM], 
+                            slm2: Optional[SLM], 
+                            cam: Optional[NITCam], 
+                            osa: Optional[YokogawaOSA], 
+                            ws: Optional[Waveshaper]):
                 self.slm1 = slm1
                 self.slm2 = slm2
                 self.osa = osa

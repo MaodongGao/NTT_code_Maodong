@@ -55,6 +55,55 @@ class GridConfig(dict):
     def __repr__(self):
         # Return the string representation of the configuration
         return '\n'.join([f"{key}: {value}" for key, value in self.clean_dict.items()])
+    
+    @property
+    def matrixsize_0(self):
+        return self["matrixsize_0"]
+    @matrixsize_0.setter
+    def matrixsize_0(self, value):
+        self["matrixsize_0"] = value
+    @property
+    def matrixsize_1(self):
+        return self["matrixsize_1"]
+    @matrixsize_1.setter
+    def matrixsize_1(self, value):
+        self["matrixsize_1"] = value
+    @property
+    def elem_width(self):
+        return self["elem_width"]
+    @elem_width.setter
+    def elem_width(self, value):
+        self["elem_width"] = value
+    @property
+    def elem_height(self):
+        return self["elem_height"]
+    @elem_height.setter
+    def elem_height(self, value):
+        self["elem_height"] = value
+    @property
+    def topleft_x(self):
+        return self["topleft_x"]
+    @topleft_x.setter
+    def topleft_x(self, value):
+        self["topleft_x"] = value
+    @property
+    def topleft_y(self):
+        return self["topleft_y"]
+    @topleft_y.setter
+    def topleft_y(self, value):
+        self["topleft_y"] = value
+    @property
+    def gap_x(self):
+        return self["gap_x"]
+    @gap_x.setter
+    def gap_x(self, value):
+        self["gap_x"] = value
+    @property
+    def gap_y(self):
+        return self["gap_y"]
+    @gap_y.setter
+    def gap_y(self, value):
+        self["gap_y"] = value
 
     # methods to plot images given the configuration
     # this code was adapted from systemcontroller.py(deprecated)

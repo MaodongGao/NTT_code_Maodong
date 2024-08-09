@@ -34,7 +34,7 @@ class waveshaper(Device):
         while attempt <= self.max_retries:
             try:
                 url = f'http://{self.ip}/waveshaper/devinfo'
-                response = requests.get(url, str(self.timeout))
+                response = requests.get(url, timeout=self.timeout)
                 response.raise_for_status()
                 self.deviceinfo = response.json()
                 self.freq_start  = self.deviceinfo['startfreq']
@@ -45,10 +45,10 @@ class waveshaper(Device):
                 self.info(self.devicename+": "+f"Attempt {attempt+1}: The request timed out. Retrying in {self.retry_delay} seconds...")
                 time.sleep(self.retry_delay)
             except requests.exceptions.HTTPError as err:
-                self.info(self.devicename+": "+f"During connection, HTTP error occurred: {err}")
+                self.error(self.devicename+": "+f"During connection, HTTP error occurred: {err}")
                 break
             except requests.exceptions.RequestException as e:
-                self.info(self.devicename+": "+f"An error occurred: {e}")
+                self.error(self.devicename+": "+f"An error occurred: {e}")
                 break
             attempt += 1
         else:
@@ -412,5 +412,9 @@ class waveshaper(Device):
         return waveshaper.c_const / thz / 1000
     
 class Waveshaper(waveshaper): # For backwards compatibility with the old naming convention
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class WaveShaper(waveshaper): # For backwards compatibility with the old naming convention
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
