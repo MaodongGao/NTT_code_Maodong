@@ -138,7 +138,8 @@ class LoggerClient:
 
     def __init_logger(self):
         logger.remove()
-        logger.add(sys.stderr, format=logger_format, level="DEBUG")  # Add all levels to console
+        
+        # logger.add(sys.stderr, format=logger_format, level="DEBUG")  # Add all levels to console
 
         context = zmq.Context.instance()
         self.socket = context.socket(zmq.PUB)
@@ -148,6 +149,20 @@ class LoggerClient:
         self.info("Logger client started at " + self.tcp_address, name="LoggerClient", **get_call_kwargs(level=0))
 
     def log(self, level, msg, name='', *args, **kwargs):
+        
+        # Add support to log ndarray
+        flag = False
+        if 'ndarray' in kwargs:
+            flag = True
+            import numpy as np
+            array = np.array(kwargs.pop('ndarray'))
+            if 'ndarray_precision' in kwargs:
+                precision = kwargs.pop('ndarray_precision')
+            else:
+                precision = None
+            with np.printoptions(threshold=np.inf, suppress=True, precision=precision):
+                msg = f"{array}\n{msg}"
+                
         # Log locally with the specified level
         log_kwargs = {**get_call_kwargs(level=2), 'devicename': name, **kwargs}
         getattr(logger.bind(**log_kwargs), level.lower())(msg)
@@ -155,6 +170,10 @@ class LoggerClient:
         # Send serialized log record over ZMQ
         serialized_record = json.dumps({'level': level, 'msg': msg, 'kwargs': log_kwargs}).encode('utf-8')
         self.socket.send_multipart([b"log", serialized_record])
+
+        # Add support to log ndarray
+        if flag:
+            self.info(f"ndarray with type {array.dtype} and shape {array.shape} taking {len(msg.encode('utf-8'))/1024:.3f} kB memory is logged.", name=name, **log_kwargs)
 
     def debug(self, msg, name='', *args, **kwargs):
         self.log('DEBUG', msg, name, *args, **kwargs)

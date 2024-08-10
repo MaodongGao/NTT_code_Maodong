@@ -3,10 +3,14 @@ import json
 import time
 import os
 import matplotlib.pyplot as plt
-from .NIT import NITLibrary_x64_320_py38 as NITLibrary
-from .device import Device
 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="to-Python converter for unsigned int already registered")
+from .NIT import NITLibrary_x64_320_py38 as NITLibrary
+
+from .device import Device
 from .utils.grid_config import GridConfig
+
 #############################################################################
 #############################################################################
 #########   The Observer class that "observes" the frmes captured by the device
@@ -52,6 +56,7 @@ class NITCam(Device):
         :param config: Configuration dictionary for the camera.
         """
         super().__init__(addr, name, isVISA)
+        self.unconnected_warning = False
         _default_config = {
             "bitDepth": 14,
             "ExposureTime": 4000,
@@ -87,6 +92,7 @@ class NITCam(Device):
     
     @property
     def config(self):
+        if (not self.connected) and self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default configuration {self.__config}")
         return self.__config
     
     @config.setter
@@ -104,55 +110,159 @@ class NITCam(Device):
     @bitDepth.setter
     def bitDepth(self, bitDepth):
         self.__config['bitDepth'] = bitDepth
-        self.info(self.devicename + ": Bit depth set to " + str(bitDepth))
+        self.info(self.devicename + ": Bit depth configured to " + str(bitDepth)+'. This setting will be updated after connection or calling update_config method.')
     
     @property
     def exposure_time(self):
-        return self.get_exposuretime()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default exposure time {self.__config['ExposureTime']}")
+            return self.__config['ExposureTime']
+        else:
+            try:
+                return self.get_exposuretime()
+            except Exception as e:
+                self.error(self.devicename + f": Error getting exposure time: {e}")
+                raise e
+            
+    def __exposure_time_nuc_path(self, exposure_time):
+        return os.path.join(os.path.dirname(__file__), 'NUCs', 'NUC_' + str(int(exposure_time)) + 'us.yml')
     
     @exposure_time.setter
     def exposure_time(self, exposureTime):
-        self.set_exposuretime(exposureTime)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default exposure time {self.__config['ExposureTime']}. Set the exposure time after connecting the camera.")
+            self.__config['ExposureTime'] = exposureTime
+            self.__config['NUC_path'] = self.__exposure_time_nuc_path(exposureTime)
+        else:
+            try:
+                self.set_exposuretime(exposureTime)
+                self.setNUCfile(self.__exposure_time_nuc_path(exposureTime))
+            except Exception as e:
+                self.error(self.devicename + f": Error setting exposure time: {e}")
+                raise e
+        # self.set_exposuretime(exposureTime)
 
     @property
     def analog_gain(self):
-        return self.get_analog_gain()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default analog gain {self.__config['Analog_gain']}")
+            return self.__config['Analog_gain']
+        else:
+            try:
+                return CameraAnalogGain(self.get_analog_gain()).name
+            except Exception as e:
+                self.error(self.devicename + f": Error getting analog gain: {e}")
+                raise e
     
     @analog_gain.setter
     def analog_gain(self, analog_gain):
-        self.set_analog_gain(analog_gain)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default analog gain {self.__config['Analog_gain']}. Set the analog gain after connecting the camera.")
+            self.__config['Analog_gain'] = analog_gain
+        else:
+            try:
+                self.set_analog_gain(analog_gain)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting analog gain: {e}")
+                raise e
+        # self.set_analog_gain(analog_gain)
 
     @property
     def offset_x(self):
-        return self.get_offset_x()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default X offset {self.__config['offset_x']}")
+            return self.__config['offset_x']
+        else:
+            try:
+                return self.get_offset_x()
+            except Exception as e:
+                self.error(self.devicename + f": Error getting X offset: {e}")
     
     @offset_x.setter
     def offset_x(self, offset_x):
-        self.set_offset_x(offset_x)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default X offset {self.__config['offset_x']}. Set the X offset after connecting the camera.")
+            self.__config['offset_x'] = offset_x
+        else:
+            try:
+                self.set_offset_x(offset_x)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting X offset: {e}")
+                raise e
+        # self.set_offset_x(offset_x)
 
     @property
     def offset_y(self):
-        return self.get_offset_y()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default Y offset {self.__config['offset_y']}")
+            return self.__config['offset_y']
+        else:
+            try:
+                return self.get_offset_y()
+            except Exception as e:
+                self.error(self.devicename + f": Error getting Y offset: {e}")
     
     @offset_y.setter
     def offset_y(self, offset_y):
-        self.set_offset_y(offset_y)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default Y offset {self.__config['offset_y']}. Set the Y offset after connecting the camera.")
+            self.__config['offset_y'] = offset_y
+        else:
+            try:
+                self.set_offset_y(offset_y)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting Y offset: {e}")
+                raise e
+        # self.set_offset_y(offset_y)
 
     @property
     def frame_width(self):
-        return self.get_frame_width()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default frame width {self.__config['width']}")
+            return self.__config['width']
+        else:
+            try:
+                return self.get_frame_width()
+            except Exception as e:
+                self.error(self.devicename + f": Error getting frame width: {e}")
+                raise e
     
     @frame_width.setter
     def frame_width(self, width):
-        self.set_frame_width(width)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default frame width {self.__config['width']}. Set the frame width after connecting the camera.")
+            self.__config['width'] = width
+        else:
+            try:
+                self.set_frame_width(width)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting frame width: {e}")
+                raise e
+        # self.set_frame_width(width)
     
     @property
     def frame_height(self):
-        return self.get_frame_height()
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Returning default frame height {self.__config['height']}")
+            return self.__config['height']
+        else:
+            try:
+                return self.get_frame_height()
+            except Exception as e:
+                self.error(self.devicename + f": Error getting frame height: {e}")
     
     @frame_height.setter
     def frame_height(self, height):
-        self.set_frame_height(height)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default frame height {self.__config['height']}. Set the frame height after connecting the camera.")
+            self.__config['height'] = height
+        else:
+            try:
+                self.set_frame_height(height)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting frame height: {e}")
+                raise e
+        # self.set_frame_height(height)
 
     @property
     def NUC_path(self):
@@ -160,7 +270,15 @@ class NITCam(Device):
     
     @NUC_path.setter
     def NUC_path(self, nuc_path):
-        self.setNUCfile(nuc_path)
+        if not self.connected:
+            if self.unconnected_warning: self.warning(self.devicename + f": Camera is not connected. Setting default NUC path {self.__config['NUC_path']}. Set the NUC path after connecting the camera.")
+            self.__config['NUC_path'] = nuc_path
+        else:
+            try:
+                self.setNUCfile(nuc_path)
+            except Exception as e:
+                self.error(self.devicename + f": Error setting NUC path: {e}")
+                raise e
 
     @property
     def FPS(self):
@@ -168,7 +286,11 @@ class NITCam(Device):
     
     @FPS.setter
     def FPS(self, fps):
+        # e = NotImplementedError("Setting FPS is not implemented for this camera.")
+        # self.error(self.devicename + f": {e}")
+        # raise e
         self.device.setFps(fps) # UNTESTED
+        self.info(self.devicename + ": FPS set to " + str(fps))
         self.__config['FPS'] = fps
 
 ########################################################
@@ -225,6 +347,7 @@ class NITCam(Device):
             self.device << self.frameObserver
 
         self.info(self.devicename+": "+"Camera connected successfully.")
+        self.connected = True
         return True
 
     def disconnect(self):
@@ -233,6 +356,7 @@ class NITCam(Device):
         """
         self.nitManager.reset()
         self.info(self.devicename+": "+"Camera disconnected.")
+        self.connected = False
 
 ########################################################
 #########     set or get values of key camera parameters
@@ -324,10 +448,11 @@ class NITCam(Device):
         """
         Set the analog gain of the camera. 
         """
-        self.device.setParamValueOf("Analog Gain", analog_gain)
+        analog_gain = CameraAnalogGain(analog_gain)
+        self.device.setParamValueOf("Analog Gain", str(analog_gain))
         self.device.updateConfig()
         self.info(self.devicename+": "+"analog gain set to "+ str(analog_gain))
-        self.__config['Analog_gain'] = analog_gain
+        self.__config['Analog_gain'] = str(analog_gain)
     
     def get_analog_gain(self):
         return self.device.paramValueOf( "Analog Gain" )
@@ -378,17 +503,36 @@ class NITCam(Device):
 ##############         Methods for capturing frames
 ############################################################
 
-    def captureFrames(self, numberOfFrames):
+    def capture_single_frame(self, save_log = False):
+        single_frame = self.captureFrames(2)[-1]
+        if save_log:
+            self.info(self.devicename + "Logged Captured Single Frame.", ndarray=(single_frame*1e5).astype(int))
+            # with np.printoptions(threshold=np.inf, precision=0, suppress=True):
+            #     tt = str((single_frame*1e5).astype(int)) # 5 significant digits
+            #     self.info(self.devicename + ": Captured frame: \n" + tt)
+            #     self.info(self.devicename + f": Single Frame logged, memory size: {len(tt.encode('utf-8'))/1024/1024:.3f} MB")
+        return single_frame
+
+
+    def captureFrames(self, numberOfFrames, save_log = False, clear_frames = False):
         """
         Capture a specified number of frames.
         :param numberOfFrames: The number of frames to capture.
         :return: List of captured images.
         """
+        if save_log and not clear_frames:
+            # only proceed in this case after manual confirmation
+            input(f"Warning: Logging frames without clearing the previous frames. This will take up many storage space. Press Enter to confirm you want to proceed...")
+        if clear_frames:
+            self.clearFrames()
         # minimum number of frames to capture is 2
         if numberOfFrames <= 1:
             raise ValueError("Number of frames must be at least 2.")
+        
         self.device.captureNFrames(numberOfFrames)
         self.device.waitEndCapture()
+        if save_log:
+            self.info(self.devicename + f": Logging {self.frameObserver.images.__len__()} Captured frames: \n", ndarray=(np.array(self.frameObserver.images)*1e5).astype(int))
         return self.frameObserver.images
     
     def captureForDuration(self, duration):
@@ -449,6 +593,15 @@ class NITCam(Device):
 
         return frames_mean
     
+    @classmethod
+    def plot_frame(self, frame, title = None, cmap = 'gray'):
+        fig, ax = plt.subplots()
+        cax = ax.imshow(frame, cmap=cmap)
+        fig.colorbar(cax)
+        if title != None:
+            ax.set_title(title)
+        plt.show()
+    
     # this code was adapted from systemcontroller.py(deprecated)
     @classmethod
     def element_ij_from_image(self, img: np.ndarray, index: tuple, elemsize: tuple, topleft: tuple, gap: tuple) -> float:
@@ -479,13 +632,12 @@ class NITCam(Device):
         topleft     =   np.array([grid_config["topleft_x"], grid_config["topleft_y"]])
         elem_size   =   np.array([grid_config["elem_width"], grid_config["elem_height"]])
         gap         =   np.array([grid_config["gap_x"], grid_config["gap_y"]])
-        offset_x = np.array(grid_config["offset_x"]).T
-        offset_y = np.array(grid_config["offset_y"]).T 
 
         data = np.empty(N)
         for n0 in range(N[0]):
             for n1 in range(N[1]):
-                data[n0,n1] = self.element_ij_from_image(img, [n0,n1], elem_size, topleft+np.array([offset_x[n1,n0], offset_y[n1,n0]]), gap)
+                # data[n0,n1] = self.element_ij_from_image(img, [n0,n1], elem_size, topleft+np.array([offset_x[n1,n0], offset_y[n1,n0]]), gap)
+                data[n0,n1] = self.element_ij_from_image(img, [n0,n1], elem_size, topleft, gap)
         return data
 
     
@@ -496,3 +648,64 @@ class NITCam(Device):
     #def __exit__(self, exc_type, exc_value, traceback):
     #    self.disconnect()
     #    print("Camera disconnected.")
+
+class CameraAnalogGain:
+    _analog_gain_map = {
+        "LOW": 0,
+        "HIGH": 1
+    }
+
+    _reversed_map = {v: k for k, v in _analog_gain_map.items()}
+
+    def __init__(self, value):
+        # Check if value is an integer, a float integer, or a string
+        if isinstance(value, int):
+            self._init_with_int(value)
+        elif isinstance(value, float) and value.is_integer():
+            # Convert float integer to int and initialize
+            self._init_with_int(int(value))
+        elif isinstance(value, str):
+            self._init_with_str(value)
+        else:
+            raise TypeError(f"Value must be an integer, a float integer, or a string, not {type(value).__name__}.")
+
+
+    def _init_with_int(self, value):
+        if value in self._reversed_map:
+            self.value = value
+            self.name = self._reversed_map[value]
+        else:
+            raise ValueError(f"Invalid analog gain value: {value}. Valid values are {', '.join(self._reversed_map.keys())}.")
+
+    def _init_with_str(self, value):
+        normalized_value = value.strip().upper()
+        if normalized_value.isdigit():  # Check if it's a string representation of an integer
+            int_value = int(normalized_value)
+            self._init_with_int(int_value)
+        elif normalized_value in self._analog_gain_map:
+            self.value = self._analog_gain_map[normalized_value]
+            self.name = normalized_value
+        else:
+            raise ValueError(
+                f"Invalid analog gain name or value: '{value}'. "
+                "Valid names are: " + ", ".join(self._analog_gain_map.keys())
+            )
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_name(cls, value):
+        if value in cls._reversed_map:
+            return cls._reversed_map[value]
+        raise ValueError(f"Analog gain value should be {', '.join(cls._reversed_map.keys())}, not {value}.")
+
+    @classmethod
+    def get_value(cls, name):
+        normalized_name = name.strip().upper()
+        if normalized_name in cls._analog_gain_map:
+            return cls._analog_gain_map[normalized_name]
+        raise ValueError(
+            f"Invalid analog gain name: '{name}'. "
+            "Valid names are: " + ", ".join(cls._analog_gain_map.keys())
+        )

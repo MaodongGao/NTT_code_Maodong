@@ -62,12 +62,12 @@ class MatrixMultiplier:
                     self.element_ij_from_image = cam.element_ij_from_image
                     self.matrix_from_image = cam.matrix_from_image
                     self.plot_rect_array = cam.grid_config.plot_rect_array
-                    self.plot_rect_array_nonuniform = cam.grid_config.plot_rect_array_nonuniform
+                    # self.plot_rect_array_nonuniform = cam.grid_config.plot_rect_array_nonuniform
 
                 self.ws = ws
                 if ws is not None:
                     self.flatten_comb = ws.flatten_comb
-        return SystemController(self.slm1, self.slm2, self.cam, self.osa, self.ws)
+        return SystemController(self.slm1, self.slm2, self.cam, self.ws, self.osa)
     
     @property
     def cam_config(self):
@@ -256,6 +256,8 @@ class MatrixMultiplier:
 
 
     def capture_dark(self, N_frames):
+        self.SysCont.camera.clearFrames()  # Clear the camera buffer
+
         # Capture dark frame (with SLMs off or blocked)
         zero_r_phase1 = self.SysCont.slm1.get_phase_for_attenuation(0)
         zero_r_phase2 = self.SysCont.slm2.get_phase_for_attenuation(0)
@@ -266,6 +268,8 @@ class MatrixMultiplier:
         print(np.shape(dark_img))
         self.dark_img = dark_img
         self.dark_data = self.SysCont.matrix_from_image(self.dark_img, self.grid_config_cam)
+
+        self.logger.info(f"{np.shape(self.dark_data)} Dark data captured with dark_img shape: {np.shape(self.dark_img)}.", ndarray=self.dark_data)
     
         return self.dark_data
 

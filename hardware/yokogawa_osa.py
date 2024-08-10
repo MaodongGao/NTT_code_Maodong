@@ -628,13 +628,27 @@ class OSASensitivity:
 
     _reversed_map = {v: k for k, v in _sensitivity_map.items()}
 
+    # def __init__(self, value):
+    #     if isinstance(value, int):
+    #         self._init_with_int(value)
+    #     elif isinstance(value, str):
+    #         self._init_with_str(value)
+    #     else:
+    #         raise TypeError(f"Value must be an integer or a string, not {type(value).__name__}.")
+        
     def __init__(self, value):
+        # Check if value is an integer, a float integer, or a string
         if isinstance(value, int):
             self._init_with_int(value)
+        elif isinstance(value, float) and value.is_integer():
+            # Convert float integer to int and initialize
+            self._init_with_int(int(value))
         elif isinstance(value, str):
             self._init_with_str(value)
         else:
-            raise TypeError(f"Value must be an integer or a string, not {type(value).__name__}.")
+            raise TypeError(f"Value must be an integer, a float integer, or a string, not {type(value).__name__}.")
+
+
 
     def _init_with_int(self, value):
         if value in self._sensitivity_map:
@@ -683,15 +697,27 @@ class OSAVerticalUnit:
 
     _reversed_map = {v: k for k, v in _unit_map.items()}
 
+    # def __init__(self, value):
+    #     if isinstance(value, int):
+    #         self._init_with_int(value)
+    #     elif isinstance(value, str):
+    #         self._init_with_str(value)
+    #     else:
+    #         raise TypeError(
+    #             f"Value must be an integer or a string, not {type(value).__name__}."
+    #         )
+        
     def __init__(self, value):
+        # Check if value is an integer, a float integer, or a string
         if isinstance(value, int):
             self._init_with_int(value)
+        elif isinstance(value, float) and value.is_integer():
+            # Convert float integer to int and initialize
+            self._init_with_int(int(value))
         elif isinstance(value, str):
             self._init_with_str(value)
         else:
-            raise TypeError(
-                f"Value must be an integer or a string, not {type(value).__name__}."
-            )
+            raise TypeError(f"Value must be an integer, a float integer, or a string, not {type(value).__name__}.")
 
     def _init_with_int(self, value):
         if value in self._reversed_map:
@@ -737,15 +763,27 @@ class OSAHorizontalUnit:
 
     _reversed_map = {v: k for k, v in _unit_map.items()}
 
+    # def __init__(self, value):
+    #     if isinstance(value, int):
+    #         self._init_with_int(value)
+    #     elif isinstance(value, str):
+    #         self._init_with_str(value)
+    #     else:
+    #         raise TypeError(
+    #             f"Value must be an integer or a string, not {type(value).__name__}."
+    #         )
+        
     def __init__(self, value):
+        # Check if value is an integer, a float integer, or a string
         if isinstance(value, int):
             self._init_with_int(value)
+        elif isinstance(value, float) and value.is_integer():
+            # Convert float integer to int and initialize
+            self._init_with_int(int(value))
         elif isinstance(value, str):
             self._init_with_str(value)
         else:
-            raise TypeError(
-                f"Value must be an integer or a string, not {type(value).__name__}."
-            )
+            raise TypeError(f"Value must be an integer, a float integer, or a string, not {type(value).__name__}.")
 
     def _init_with_int(self, value):
         if value in self._reversed_map:
