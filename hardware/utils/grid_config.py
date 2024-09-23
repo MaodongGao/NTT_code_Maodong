@@ -127,6 +127,30 @@ class GridConfig(dict):
                 ax.add_patch(rect)
         plt.show()
 
+    def matrix_from_image(self, img, grid_config=None):
+        if grid_config is None:
+            grid_config = {}
+            for key, value in self.items():
+                grid_config[key] = value
+
+        N           =   [grid_config["matrixsize_0"], grid_config["matrixsize_1"]]
+        topleft     =   np.array([grid_config["topleft_x"], grid_config["topleft_y"]])
+        elem_size   =   np.array([grid_config["elem_width"], grid_config["elem_height"]])
+        gap         =   np.array([grid_config["gap_x"], grid_config["gap_y"]])
+
+        data = np.empty(N)
+        for n0 in range(N[0]):
+            for n1 in range(N[1]):
+                # data[n0,n1] = self.element_ij_from_image(img, [n0,n1], elem_size, topleft+np.array([offset_x[n1,n0], offset_y[n1,n0]]), gap)
+                data[n0,n1] = self.element_ij_from_image(img, [n0,n1], elem_size, topleft, gap)
+        return data
+
+    def element_ij_from_image(self, img: np.ndarray, index: tuple, elemsize: tuple, topleft: tuple, gap: tuple) -> float:
+        #extract and return data(index). Here index = (i,j)
+        topleft_ij  = topleft + (elemsize + gap)*np.array([index[1], index[0]])
+        data_ij       = img[ topleft_ij[1]: topleft_ij[1] + elemsize[1], topleft_ij[0]: topleft_ij[0] + elemsize[0]]
+        return np.mean(data_ij)
+
     # def plot_rect_array_nonuniform(self, img, grid_config=None):
     #     if grid_config is None:
     #         grid_config = {}

@@ -1,5 +1,6 @@
 from loguru import logger
 import os, sys, zmq, inspect, json, warnings
+import multiprocessing
 logger_format = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
@@ -225,6 +226,12 @@ class LoggerClient:
         except Exception as e:
             logger.bind(devicename="LoggerClient").error(f"Critical warning email failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
 
+
+
+
+
+
+
 class LoggerServer:
     '''
     Logger server class to receive log
@@ -282,7 +289,7 @@ class LoggerServer:
                 break
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
-        
+
     def __send_log_file_via_email(self, log_file_path):        
         import platform
         laptop_name = platform.node()
@@ -295,6 +302,29 @@ class LoggerServer:
             logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
         except Exception as e:
             logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
+
+
+    # def __send_log_file_via_email(self, log_file_path):
+    #     # Start a new process to send the email
+    #     process = multiprocessing.Process(target=self.__send_email_process, args=(log_file_path,))
+    #     process.start()
+
+    # def __send_email_process(self, log_file_path):
+    #     import platform
+    #     laptop_name = platform.node()
+    #     subject = "[Regular][NTT-PHI-Lab] log file rotated on " + laptop_name + ": " + str(os.path.split(log_file_path)[1])
+    #     mail_content = '[Automatically Generated Email] \n\n' + 'Hello, \n\n Attached are the rotated data logging file at NTT-PHI-Lab. This log file is sent from computer: ' + laptop_name + '. \n\n This email is for log file backup purpose only. \n\n Best, \n Maodong'
+    #     recv_address = self.email_recipient
+
+    #     try:
+    #         send_email(subject, mail_content, recv_address, attachment=log_file_path, is_html=False)
+    #         logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
+    #     except Exception as e:
+    #         logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
+
+
+
+
 
 
 
@@ -406,3 +436,23 @@ class LoggerServer:
 #     def __send_log_file_via_email(self):
 #         print("send log file via email FUNCTION CALLED")
 #         pass
+
+
+
+    # def __send_log_file_via_email(self, log_file_path):
+    #     # Start a new process to send the email
+    #     process = multiprocessing.Process(target=self.__send_email_process, args=(log_file_path,))
+    #     process.start()
+
+    # def __send_email_process(self, log_file_path):
+    #     import platform
+    #     laptop_name = platform.node()
+    #     subject = "[Regular][NTT-PHI-Lab] log file rotated on " + laptop_name + ": " + str(os.path.split(log_file_path)[1])
+    #     mail_content = '[Automatically Generated Email] \n\n' + 'Hello, \n\n Attached are the rotated data logging file at NTT-PHI-Lab. This log file is sent from computer: ' + laptop_name + '. \n\n This email is for log file backup purpose only. \n\n Best, \n Maodong'
+    #     recv_address = self.email_recipient
+
+    #     try:
+    #         send_email(subject, mail_content, recv_address, attachment=log_file_path, is_html=False)
+    #         logger.bind(devicename="LoggerServer").info(f"Rotated Log file {log_file_path} on {laptop_name} sent to {recv_address}", **get_call_kwargs(level=0))
+    #     except Exception as e:
+    #         logger.bind(devicename="LoggerServer").error(f"Rotated Log file {log_file_path} on {laptop_name} failed to send to {recv_address}. Error: {e}.", **get_call_kwargs(level=0))
