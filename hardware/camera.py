@@ -125,7 +125,7 @@ class NITCam(Device):
                 raise e
             
     def __exposure_time_nuc_path(self, exposure_time):
-        return os.path.join(os.path.dirname(__file__), 'NUCs', 'NUC_' + str(int(exposure_time)) + 'us.yml')
+        return os.path.normpath(os.path.join(os.path.dirname(__file__), 'NUCs', 'NUC_' + str(int(exposure_time)) + 'us.yml'))
     
     @exposure_time.setter
     def exposure_time(self, exposureTime):
@@ -380,6 +380,11 @@ class NITCam(Device):
         """
         Set the NUC file path
         """
+        # Check if the file exists, raise an error if it doesn't
+        if not os.path.exists(nuc_path):
+            self.error(self.devicename+": "+"NUC file not found: " + nuc_path)
+            return
+            # raise FileNotFoundError(f"NUC file not found: {nuc_path}")
         self.device.setNucFile(nuc_path)
         self.device.activateNuc()
         self.device.updateConfig()

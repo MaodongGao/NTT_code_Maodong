@@ -6,6 +6,8 @@ from typing import Optional
 
 import numpy as np
 import time
+import os
+import pandas as pd
 
 C_CONST = 299792458
 
@@ -35,7 +37,8 @@ class SpeckleCollector:
 
     def collect_wl_pattern(self, wl_nm: float, save_log: bool = False):
         self.laser.laser1.ctl.wavelength_set.set(wl_nm)
-
+        time.sleep(0.5)
+        
         # Wait for the laser to stabilize
         tic = time.time()
         while not np.isclose(self.laser.laser1.ctl.wavelength_act.get(), wl_nm, atol=self.wl_tol_nm):
@@ -45,12 +48,13 @@ class SpeckleCollector:
         self.laser.info(f"Set wavelength to {self.laser.laser1.ctl.wavelength_act.get()} nm")
 
         # Capture the image
+        self.camera.clearFrames()
         img = self.camera.capture_single_frame(save_log=save_log)
         self.info(f"Captured image at {wl_nm} nm")
 
         return img
 
-    def scan_wl_pattern(self, wl_start_nm: float, wl_stop_nm: float, step_MHz: float = 10, filename=None, extensions=None):
+    def scan_wl_pattern(self, wl_start_nm: float, wl_stop_nm: float, step_MHz: float = 10, filename=None):
         wl_start_THz = self.__nm2thz(wl_start_nm)
         wl_stop_THz = self.__nm2thz(wl_stop_nm)
         step_THz = step_MHz / 1e6
@@ -61,38 +65,35 @@ class SpeckleCollector:
         # Prepare the array of wavelengths
         wl_THz = np.arange(wl_start_THz, wl_stop_THz, step_THz)
 
-        if filename is not None:
-            if extensions is None:
-                extensions = ['.csv','.json']
-            self._prepare_file(filename, extensions)
-
-        if '.csv' in extensions:
-            import csv
-            with open(filename+'.csv', mode='w', newline='') as file:
-                writer = csv.writer(file)
-                # Headers record camera settings
-                writer.writerow(['bitDepth', self.camera.bitDepth])
-                writer.writerow(['exposureTime', self.camera.exposure_time])
-                writer.writerow(['AnalogGain', self.camera.analog_gain])
-                writer.writerow(['offset_x', self.camera.offset_x])
-                writer.writerow(['offset_y', self.camera.offset_y])
-                writer.writerow(['width', self.camera.frame_width])
-                writer.writerow(['height', self.camera.frame_height])
-                writer.writerow([])
-                writer.writerow(['Wavelength(nm)', 'Freq(THz)', 'Image'])
-
         # Prepare the array of images
         images = {}
-        for freq_thz in wl_THz:
+        temp_tosave = {}
+        for ii, freq_thz in enumerate(wl_THz):
             wl_nm = self.__thz2nm(freq_thz)
-            images[wl_nm] = self.collect_wl_pattern(wl_nm)
+            time.sleep(0.5)
+            images[wl_nm] = self.collect_wl_pattern(wl_nm).flatten().tolist()
 
-            if '.csv' in extensions:
-                with open(filename+'.csv', mode='a', newline='') as file:
-                    writer = csv.writer(file)
-                    writer.writerow([wl_nm, freq_thz] + images[wl_nm].flatten().tolist())
+            temp_tosave[wl_nm] = images[wl_nm]
 
-        if '.json' in extensions:
+            # with open(filename+'.csv', mode='a', newline='') as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow([wl_nm] + images[wl_nm].flatten().tolist())
+
+            # Save the images to a file every 10 images
+            if filename is not None and ((ii+1) % 10 == 0):
+                df = pd.DataFrame(temp_tosave)
+                df.to_csv(os.path.join(filename, f'{filename}_{(ii+1)//10}.csv'), index=False)
+                temp_tosave = {}
+        
+        # handle the remaining images
+        if filename is not None and len(temp_tosave) > 0:
+            df = pd.DataFrame(temp_tosave)
+            df.to_csv(os.path.join(filename, f'{filename}_{((ii+1)//10) +1}.csv'), index=False)
+
+        if filename is not None:
+            extensions = ['.json']
+            self._prepare_file(filename, extensions)
+
             import json
             class NumpyEncoder(json.JSONEncoder):
                 def default(self, obj):
@@ -101,7 +102,12 @@ class SpeckleCollector:
                     return json.JSONEncoder.default(self, obj)
             # save images to json
             with open(filename+'.json', 'w') as file:
-                json.dump(images, file, cls=NumpyEncoder)
+                json.dump(self.camera.config, file, cls=NumpyEncoder)
+
+            extensions = ['.csv']
+            self._prepare_file(filename, extensions)
+            df = pd.DataFrame(images)
+            df.to_csv(filename+'.csv', index=False)
 
         return images
 
@@ -114,7 +120,6 @@ class SpeckleCollector:
         return C_CONST / thz / 1000
     
     def _prepare_file(self, filename, extensions=None):
-        import os
         """Prepare the file by creating directories and handling existing files."""
         filedir, single_filename = os.path.split(filename)
         if not os.path.isdir(filedir) and filedir != '':
@@ -134,3 +139,16 @@ class SpeckleCollector:
                 os.rename(filename + ext, new_name)
 
         return filename
+
+    def _prepare_directory(self, directory):
+        """Prepare the directory by creating directories and handling existing files."""
+        if not os.path.isdir(directory):
+            self.warning(self.devicename + ": Directory " + directory + " does not exist. Creating new directory.")
+            os.makedirs(directory)
+        else:
+            self.warning(self.devicename + ": Directory " + directory + " already exists. Previous directory renamed.")
+            now = time.strftime("%Y%m%d_%H%M%S")
+            new_name = f"{directory}_{now}_bak"
+            os.rename(directory, new_name)
+
+        return directory
