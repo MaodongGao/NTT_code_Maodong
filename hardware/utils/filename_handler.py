@@ -13,13 +13,17 @@ from datetime import datetime
 
 class DirnameHandler:
     def __init__(self, target):
-        '''
-        This class dedicated to preparing target as a directory to save data.
-        Parameters
-        ----------
-        target : str
-            The target directory name.
-        '''
+        
+        # Example usage:
+        # target = r'C:\Users\user\Documents\ test'
+        # DirnameHandler(target).prepare() # create new directory if not exist, rename old dir if already exist
+
+        # This class dedicated to preparing target as a directory to save data.
+        # Parameters
+        # ----------
+        # target : str
+        #     The target directory name.
+        
         self.target = target
     
     def prepare(self):
@@ -37,17 +41,33 @@ class DirnameHandler:
 
 class FilenameHandler:
     def __init__(self, target):
-        '''
-        This class dedicated to preparing target as a filename to save data.
-        Parameters
-        ----------
-        target : str
-            The target file name.
-        '''
+        
+        # Example usage:
+        # target = r'C:\Users\user\Documents\ test\ test.csv'
+        # FilenameHandler(target).prepare() # return None if no action was taken, create new dir if not exist, rename old file if already exist, return message describing the action taken
+        
+        # Example usage 2:
+        # target = r'C:\Users\user\Documents\test\test' # no extension
+        # FilenameHandler(target).prepare('.csv') 
+
+        # Example usage 3:
+        # target = r'C:\Users\user\Documents\ test\ test.csv' # with extension
+        # FilenameHandler(target).prepare('.csv') # argument '.csv' is unnecessary and will be ignored, the handled filename will be 'test.csv'
+
+        # Example usage 4:
+        # target = r'C:\Users\user\Documents\ test\ test.csv'
+        # FilenameHandler(target).prepare('.json') # The handled filename will be 'test.csv.json'
+    
+        # This class dedicated to preparing target as a filename to save data.
+        # Parameters
+        # ----------
+        # target : str
+        #     The target file name.
+        
         self.target = target
 
     @property
-    def target_without_extension(self):
+    def _target_without_extension(self):
         '''
         Returns
         -------
@@ -57,7 +77,7 @@ class FilenameHandler:
         return os.path.normpath(os.path.splitext(self.target)[0])
 
     @property
-    def target_extension(self):
+    def _target_extension(self):
         '''
         Returns
         -------
@@ -67,14 +87,14 @@ class FilenameHandler:
         return os.path.splitext(self.target)[1]
 
     @property
-    def target_contains_extension(self):
+    def _target_contains_extension(self):
         '''
         Returns
         -------
         bool
             True if the target contains an extension, False otherwise.
         '''
-        return bool(self.target_extension)
+        return bool(self._target_extension)
 
     def prepare(self, extension=None):
         '''
@@ -100,7 +120,7 @@ class FilenameHandler:
         '''
         Prepare the directory to self.target if it does not exist.
         '''
-        filename_to_handle = self.combine_name_and_extension(extension)
+        filename_to_handle = self._combine_name_and_extension(extension)
         filedir, single_filename = os.path.split(filename_to_handle)        
         if not os.path.isdir(filedir) and filedir != '':
             os.makedirs(filedir)
@@ -116,7 +136,7 @@ class FilenameHandler:
         extension : str, optional
             The extension of the file to rename.
         '''
-        filename_to_handle = self.combine_name_and_extension(extension)
+        filename_to_handle = self._combine_name_and_extension(extension)
         if os.path.isfile(filename_to_handle):
             new_filename = self._combine_name_and_timestamp(extension)
             os.rename(filename_to_handle, new_filename)
@@ -139,11 +159,11 @@ class FilenameHandler:
             The combined target name and timestamp. This will be the full normalized filename to use.
         '''
         now = datetime.now().strftime('%Y%m%d_%H%M%S_%f') # example: 20210831_123456_123456
-        filename_to_handle = self.combine_name_and_extension(extension)
+        filename_to_handle = self._combine_name_and_extension(extension)
         new_filename = os.path.splitext(filename_to_handle)[0] + '_' + now + os.path.splitext(filename_to_handle)[1]
         return new_filename
 
-    def combine_name_and_extension(self, extension):
+    def _combine_name_and_extension(self, extension):
         '''
         Combines the target name with the provided extension.
 
@@ -160,19 +180,19 @@ class FilenameHandler:
         if extension is not None and not extension.startswith('.'):
             extension = '.' + extension
 
-        if extension is None and not self.target_contains_extension:
+        if extension is None and not self._target_contains_extension:
             # warnings.warn('No extension provided in target file name, will proceed without an extension.')
             return self.target ### IF AND ONLY IF HERE, THE RETURN VALUE DOES NOT CONTAIN AN EXTENSION
-        elif extension is None and self.target_contains_extension:
+        elif extension is None and self._target_contains_extension:
             return self.target
-        elif extension is not None and not self.target_contains_extension:
+        elif extension is not None and not self._target_contains_extension:
             return self.target + extension
         else: # handle the case where both are provided
             # check if the provided extension is the same as the existing extension
-            if extension.casefold() == self.target_extension.casefold():
+            if extension.casefold() == self._target_extension.casefold():
                 return self.target
             else:
-                warnings.warn('Provided extension %s does not match the filename extension %s.' % (extension, self.target_extension) +
-                 'The filename extension %s will be ignored as part of the target file name.\n' % self.target_extension + 
+                warnings.warn('Provided extension %s does not match the filename extension %s.' % (extension, self._target_extension) +
+                 'The filename extension %s will be ignored as part of the target file name.\n' % self._target_extension + 
                  'The proceeding filename will be %s.' % self.target + extension)
-                 return self.target + extension
+                return self.target + extension

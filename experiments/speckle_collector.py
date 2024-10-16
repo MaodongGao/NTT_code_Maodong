@@ -9,6 +9,8 @@ import time
 import os
 import pandas as pd
 
+from hardware.utils.filename_handler import DirnameHandler, FilenameHandler
+
 C_CONST = 299792458
 
 class SpeckleCollector:
@@ -25,7 +27,7 @@ class SpeckleCollector:
 
         self.camera = camera
         self.laser = laser
-        self.wl_tol_MHz = 10 # tolerance of laser wavelength uncertainty in MHz
+        self.wl_tol_MHz = 125 # tolerance of laser wavelength uncertainty in MHz
 
 
 
@@ -37,20 +39,34 @@ class SpeckleCollector:
 
     def collect_wl_pattern(self, wl_nm: float, save_log: bool = False):
         self.laser.laser1.ctl.wavelength_set.set(wl_nm)
-        time.sleep(0.5)
-        
+        # time.sleep(1)
+
         # Wait for the laser to stabilize
         tic = time.time()
-        while not np.isclose(self.laser.laser1.ctl.wavelength_act.get(), wl_nm, atol=self.wl_tol_nm):
-            if time.time() - tic > 10:
+        # while not np.isclose(self.laser.laser1.ctl.wavelength_act.get(), wl_nm, atol=self.wl_tol_nm):
+        wl_now = self.laser.get_time_avged_value(get_func=self.laser.laser1.ctl.wavelength_act.get, 
+                                                             avg_time=1, interval=0)
+        while not np.isclose(wl_now,
+                             wl_nm, atol=self.wl_tol_nm, rtol=0.0):
+            if time.time() - tic > 20:
                 self.laser.error(f"Timeout waiting for laser to stabilize at {wl_nm} nm")
                 raise TimeoutError("Timeout waiting for laser to stabilize")
-        self.laser.info(f"Set wavelength to {self.laser.laser1.ctl.wavelength_act.get()} nm")
+            
+            self.info(f"Comparing last second avg wavelength {wl_now} nm to target {wl_nm} nm, diff = {np.abs(wl_now - wl_nm)} nm out of tolerance {self.wl_tol_nm} nm ({self.wl_tol_MHz} MHz)")
+            self.laser.laser1.ctl.wavelength_set.set(wl_nm)
+            time.sleep(0.5)
+            wl_now = self.laser.get_time_avged_value(get_func=self.laser.laser1.ctl.wavelength_act.get,
+                                                        avg_time=1, interval=0)
+        
+        self.info(f"Last second avg wavelength \t{wl_now} nm ({self.__nm2thz(wl_now)*1e6} MHz)\n is close to target \t\t{wl_nm} nm ({self.__nm2thz(wl_nm)*1e6} MHz).\n Difference \t\t\t{np.abs(wl_now - wl_nm)} nm ({np.abs(self.__nm2thz(wl_now) - self.__nm2thz(wl_nm))*1e6} MHz)\n is within tolerance \t\t{self.wl_tol_nm} nm ({self.wl_tol_MHz} MHz)")
+
+        ww = self.laser.laser1.ctl.wavelength_act.get()
+        self.laser.info(f"Last acquired laser wavelength is {ww} nm, {self.__nm2thz(ww)*1e6} MHz")
 
         # Capture the image
         self.camera.clearFrames()
         img = self.camera.capture_single_frame(save_log=save_log)
-        self.info(f"Captured image at {wl_nm} nm")
+        self.info(f"Captured image at {wl_nm} nm, {self.__nm2thz(wl_nm)*1e6} MHz")
 
         return img
 
@@ -68,6 +84,10 @@ class SpeckleCollector:
         # Prepare the array of images
         images = {}
         temp_tosave = {}
+
+        dirname_handler = DirnameHandler(filename).prepare()
+        self.info(dirname_handler)
+
         for ii, freq_thz in enumerate(wl_THz):
             wl_nm = self.__thz2nm(freq_thz)
             time.sleep(0.5)
@@ -91,8 +111,8 @@ class SpeckleCollector:
             df.to_csv(os.path.join(filename, f'{filename}_{((ii+1)//10) +1}.csv'), index=False)
 
         if filename is not None:
-            extensions = ['.json']
-            self._prepare_file(filename, extensions)
+            extensions = ['.json', '.csv']
+            for ext in extensions: self.info(FilenameHandler(filename).prepare(ext))
 
             import json
             class NumpyEncoder(json.JSONEncoder):
@@ -104,12 +124,11 @@ class SpeckleCollector:
             with open(filename+'.json', 'w') as file:
                 json.dump(self.camera.config, file, cls=NumpyEncoder)
 
-            extensions = ['.csv']
-            self._prepare_file(filename, extensions)
-            df = pd.DataFrame(images)
-            df.to_csv(filename+'.csv', index=False)
 
-        return images
+        #     df = pd.DataFrame(images)
+        #     df.to_csv(filename+'.csv', index=False)
+
+        # return images
 
 
     

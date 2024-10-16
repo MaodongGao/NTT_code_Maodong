@@ -35,5 +35,19 @@ class TopticaLaser(Device, dlcsdk.DLCpro):
             self.connected = False
             self.info("toptica laser disconnected")
     
+    def get_time_avged_value(self, avg_time = 5, interval = 0.1,
+                             get_func = None):
+        '''
+        Get the time-averaged value of the laser over avg_time seconds.
+        '''
+        if get_func is None:
+            get_func = self.laser1.ctl.wavelength_act.get
+        t_start = time.time()
+        values = []
+        while time.time() - t_start < avg_time:
+            values.append(get_func())
+            if not np.isclose(interval, 0):
+                time.sleep(interval)
+        return np.mean(values)
 
         
