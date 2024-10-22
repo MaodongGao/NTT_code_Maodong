@@ -27,7 +27,7 @@ class SpeckleCollector:
 
         self.camera = camera
         self.laser = laser
-        self.wl_tol_MHz = 125 # tolerance of laser wavelength uncertainty in MHz
+        self.wl_tol_MHz = 250 # tolerance of laser wavelength uncertainty in MHz
 
 
 
@@ -48,7 +48,7 @@ class SpeckleCollector:
                                                              avg_time=1, interval=0)
         while not np.isclose(wl_now,
                              wl_nm, atol=self.wl_tol_nm, rtol=0.0):
-            if time.time() - tic > 20:
+            if time.time() - tic > 30:
                 self.laser.error(f"Timeout waiting for laser to stabilize at {wl_nm} nm")
                 raise TimeoutError("Timeout waiting for laser to stabilize")
             
@@ -70,7 +70,12 @@ class SpeckleCollector:
 
         return img
 
-    def scan_wl_pattern(self, wl_start_nm: float, wl_stop_nm: float, step_MHz: float = 10, filename=None):
+    def scan_wl_pattern(self, wl_start_nm: float, 
+                        wl_stop_nm: float, 
+                        step_MHz: float = 10, 
+                        filename=None, 
+                        callback=None # callback function to be called after each image is captured
+                        ):
         wl_start_THz = self.__nm2thz(wl_start_nm)
         wl_stop_THz = self.__nm2thz(wl_stop_nm)
         step_THz = step_MHz / 1e6
@@ -81,35 +86,12 @@ class SpeckleCollector:
         # Prepare the array of wavelengths
         wl_THz = np.arange(wl_start_THz, wl_stop_THz, step_THz)
 
-        # Prepare the array of images
-        images = {}
-        temp_tosave = {}
+        # Prepare the file directory
+        if filename is not None:
+            dirname_handler = DirnameHandler(filename).prepare()
+            self.info(dirname_handler)
 
-        dirname_handler = DirnameHandler(filename).prepare()
-        self.info(dirname_handler)
-
-        for ii, freq_thz in enumerate(wl_THz):
-            wl_nm = self.__thz2nm(freq_thz)
-            time.sleep(0.5)
-            images[wl_nm] = self.collect_wl_pattern(wl_nm).flatten().tolist()
-
-            temp_tosave[wl_nm] = images[wl_nm]
-
-            # with open(filename+'.csv', mode='a', newline='') as file:
-            #     writer = csv.writer(file)
-            #     writer.writerow([wl_nm] + images[wl_nm].flatten().tolist())
-
-            # Save the images to a file every 10 images
-            if filename is not None and ((ii+1) % 10 == 0):
-                df = pd.DataFrame(temp_tosave)
-                df.to_csv(os.path.join(filename, f'{filename}_{(ii+1)//10}.csv'), index=False)
-                temp_tosave = {}
-        
-        # handle the remaining images
-        if filename is not None and len(temp_tosave) > 0:
-            df = pd.DataFrame(temp_tosave)
-            df.to_csv(os.path.join(filename, f'{filename}_{((ii+1)//10) +1}.csv'), index=False)
-
+        # First save camera config to file
         if filename is not None:
             extensions = ['.json', '.csv']
             for ext in extensions: self.info(FilenameHandler(filename).prepare(ext))
@@ -123,6 +105,67 @@ class SpeckleCollector:
             # save images to json
             with open(filename+'.json', 'w') as file:
                 json.dump(self.camera.config, file, cls=NumpyEncoder)
+
+
+        # Prepare the array of images
+        images = {}
+        temp_tosave = {}
+        callback_tosave = {}
+
+        failed_wls = []
+        failed_callback_wls = []
+
+        from tqdm import tqdm
+        for ii, freq_thz in enumerate(tqdm(wl_THz)):
+            wl_nm = self.__thz2nm(freq_thz)
+            time.sleep(0.5)
+            try:
+                images[wl_nm] = self.collect_wl_pattern(wl_nm).flatten().tolist()
+            except TimeoutError:
+                self.warning(f"Timeout error at {wl_nm} nm")
+                failed_wls.append(wl_nm)
+                continue
+
+            temp_tosave[wl_nm] = images[wl_nm]
+
+            if callback is not None:
+                try:
+                    callback_tosave[wl_nm] = callback()
+                except Exception as e:
+                    self.warning(f"Error in callback at {wl_nm} nm: {e}")
+                    failed_callback_wls.append(wl_nm)
+
+            # with open(filename+'.csv', mode='a', newline='') as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow([wl_nm] + images[wl_nm].flatten().tolist())
+
+            # Save the images to a file every 10 images
+            if filename is not None and ((ii+1) % 10 == 0):
+                df = pd.DataFrame(temp_tosave)
+                df.to_csv(os.path.join(filename, f'{filename}_{(ii+1)//10}.csv'), index=False)
+                temp_tosave = {}
+                if callback is not None:
+                    df_callback = pd.DataFrame(callback_tosave)
+                    df_callback.to_csv(os.path.join(filename, f'{filename}_{(ii+1)//10}_callback.csv'), index=False)
+                    callback_tosave = {}
+        
+        # handle the remaining images
+        if filename is not None and len(temp_tosave) > 0:
+            df = pd.DataFrame(temp_tosave)
+            df.to_csv(os.path.join(filename, f'{filename}_{((ii+1)//10) +1}.csv'), index=False)
+            if callback is not None:
+                df_callback = pd.DataFrame(callback_tosave)
+                df_callback.to_csv(os.path.join(filename, f'{filename}_{((ii+1)//10) +1}_callback.csv'), index=False)
+
+        
+        # save failed wls
+        if filename is not None and len(failed_wls) > 0:
+            failed_wls = np.array(failed_wls)
+            np.savetxt(os.path.join(filename, f'{filename}_failed_wls.csv'), failed_wls, delimiter=',', fmt='%f')
+
+        if filename is not None and callback is not None and len(failed_callback_wls) > 0:
+            failed_callback_wls = np.array(failed_callback_wls)
+            np.savetxt(os.path.join(filename, f'{filename}_failed_callback_wls.csv'), failed_callback_wls, delimiter=',', fmt='%f')
 
 
         #     df = pd.DataFrame(images)

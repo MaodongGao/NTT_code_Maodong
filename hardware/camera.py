@@ -32,7 +32,7 @@ class myPyObserver(NITLibrary.NITUserObserver):
         new_frame = np.copy(frame.data())
         self.images.append(new_frame)
         self.counter += 1
-        print(f"Frame {self.counter}", end="\r")
+        # print(f"Frame {self.counter}", end="\r")
 
     def clearFrame(self):
         """

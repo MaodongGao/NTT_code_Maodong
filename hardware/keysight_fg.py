@@ -201,7 +201,7 @@ class KeysightFG(Device):
 
     
 if __name__ == "__main__":
-    fg = KeysightFG_33500()
+    fg = KeysightFG()
     fg.connect()
     print(fg.IDN)
     fg.disconnect()
