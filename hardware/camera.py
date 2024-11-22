@@ -334,7 +334,9 @@ class NITCam(Device):
         else:
             self.info(self.devicename+": "+"USB Camera Detected")
 
-        self.device.setParamValueOf("Analog Gain", self.__config['Analog_gain'])
+        # self.device.setParamValueOf("Analog Gain", self.__config['Analog_gain'])
+
+
         # TODO: implement TEC here and in the config file
         #self.device.setParamValueOf("Tec Mode", 3)
         #self.device.setParamValueOf("Temperature Tec", 25.0)

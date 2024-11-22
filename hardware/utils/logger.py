@@ -276,7 +276,10 @@ class LoggerServer:
         self.socket.subscribe("")
         logger.remove()
         logger.add(sys.stderr, format=logger_format, level="DEBUG")  # Add all levels to console
-        logger.add(self.logfile, format=logger_format, level="DEBUG", rotation="10 MB", retention=5, enqueue=True, compression=self.__send_log_file_via_email)
+        
+        # logger.add(self.logfile, format=logger_format, level="DEBUG", rotation="10 MB", retention=5, enqueue=True, compression=self.__send_log_file_via_email)
+
+        logger.add(self.logfile, format=logger_format, level="DEBUG", rotation="10 MB", retention=5, enqueue=True) #, compression=self.__send_log_file_via_email)
 
         logger.bind(devicename="LoggerServer").info("Logger server started at " + self.tcp_address, **get_call_kwargs(level=0))
         

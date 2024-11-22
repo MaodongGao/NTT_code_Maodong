@@ -10,18 +10,65 @@ import time
 C_CONST = 299792458  # Speed of light in m/s
 
 class YokogawaOSA(Device):
-    def __init__(self, addr='GPIB0::1::INSTR', name="OSA"):
-        super().__init__(addr=addr, name=name)
+    def __init__(self, addr="192.168.1.23", # 'GPIB0::1::INSTR'
+                  name="OSA"):
+       
+
+        if addr.startswith('GPIB'):
+            self.com_protocol = 'GPIB'
+
+            super().__init__(addr=addr, name=name, isVISA=True)
+
+            
+            self.inst.timeout = 25000  # Communication timeout in ms
+            self.inst.baud_rate = 19200  # Baud rate for communication
+            self.inst.read_termination = ''  # Read termination
+            self.inst.write_termination = ''  # Default is '\r\n'
+
+        else:
+            self.com_protocol = 'vxi11'
+
+            super().__init__(addr=addr, name=name, isVISA=False)
 
         # Default device settings
         self.__activation_timeout = 3  # Time to wait for device activation/deactivation in seconds
-        self.inst.timeout = 25000  # Communication timeout in ms
-        self.inst.baud_rate = 19200  # Baud rate for communication
-        self.inst.read_termination = ''  # Read termination
-        self.inst.write_termination = ''  # Default is '\r\n'
         self.__wavelength_prec_nm = '0.00'  # Wavelength precision up to 2 decimal places
         self.__available_traces = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
         self.osaacquiring = False
+
+    def connect(self):
+        if self.com_protocol == 'GPIB':
+            super().connect()
+        else:
+            if not self.connected:
+                try:
+                    import vxi11
+                    self.inst =  vxi11.Instrument(self.addr)
+                    self.connected = True
+                    self.info(f'{self.devicename}: Connected via {self.com_protocol} protocol')
+                    return 1
+                except Exception as e:
+                    self.error(f'{self.devicename}: Failed to connect via {self.com_protocol} protocol. Error: {e}')
+                    return -1
+            return 0
+    
+    def disconnect(self):
+        if self.com_protocol == 'GPIB':
+            super().disconnect()
+        else:
+            if self.connected:
+                self.inst.close()
+                self.connected = False
+                self.info(f'{self.devicename}: via {self.com_protocol} protocol device released.')
+                return 1
+            return 0
+    
+    def query(self, cmd):
+        if self.com_protocol == 'GPIB':
+            return super().query(cmd)
+        else:
+            return self.inst.ask(cmd)
+            
 
     def set_resolution_nm(self, resolution_nm):
         try:
@@ -273,7 +320,7 @@ class YokogawaOSA(Device):
             self.error(f'{self.devicename}: Failed to get Y data for trace {trace}. Error: {e}')
             raise
 
-    def get_trace(self, trace, plot=True, filename=None, logdata=True):
+    def get_trace(self, trace, plot=True, filename=None, logdata=False):
         """Retrieve both X and Y data for the specified trace and optionally plot it."""
         trace = self._validate_trace(trace)
         wl = self.get_XData(trace, logdata=logdata)
@@ -301,7 +348,7 @@ class YokogawaOSA(Device):
         plt.show()
         self.info(self.devicename + ": Trace " + trace + " data is collected and shown in the plot.")
 
-    def save_trace(self, trace, filename, extensions=['.mat', '.txt', '.npy'], plot=True, logdata=True):
+    def save_trace(self, trace, filename, extensions=['.mat', '.txt', '.npy'], plot=True, logdata=False):
         trace = self._validate_trace(trace)
 
         # Check if filename already has an extension

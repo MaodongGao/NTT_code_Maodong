@@ -7,16 +7,17 @@ from .device import Device
 
 
 class waveshaper(Device):
-    def __init__(self, addr="192.168.1.3", name='wsp', isVISA=False):
+    c_const = 299792458  # Speed of light in m/s
+
+    def __init__(self, addr="192.168.1.22", name='wsp', isVISA=False):
         super().__init__(addr, name, isVISA)
-        self.c_const = 299792458  # Speed of light in m/s
         config = {
             "ip": self.addr,
             "max_retries" : 4,
             "retry_delay" : 0.5,
             "timeout" : 3,
             "frequency_step_THz" : 0.001,
-            "max_attenuation" : 50,
+            "max_attenuation" : 60, #50,
             "startfreq_default": 187.275,
             "stopfreq_default": 196.274
             }
@@ -59,6 +60,10 @@ class waveshaper(Device):
             self.freq_end = self.stopfreq_default
 
         # self.wsFreq = np.linspace(freq_start, freq_end, int((freq_end - freq_start) / self.frequency_step_THz + 1))
+
+    @property
+    def MAX_ATTEN(self): # for code compatibility
+        return self.max_attenuation
     
     def connect(self):
         print("WaveShaper through ip , no need to connect")
@@ -121,8 +126,8 @@ class waveshaper(Device):
 
         wsFreq      = self.wsFreq
 
-        wsAttn[np.isnan(wsAttn)]   = 60
-        wsAttn[wsAttn > 60]        = 60
+        wsAttn[np.isnan(wsAttn)] = self.MAX_ATTEN
+        wsAttn[wsAttn > self.MAX_ATTEN] = self.MAX_ATTEN
         wsAttn[wsAttn <= 0]        = 0
         wsPhase[np.isnan(wsPhase)] = 0
         wspString = ''
@@ -204,8 +209,8 @@ class waveshaper(Device):
             plt.tight_layout()
             plt.show()
 
-        # To test the plot_profile function
-        self.plot_profile(wsFreq, wsAttn, wsPhase, wsPort)
+            # # To test the plot_profile function
+            # self.plot_profile(wsFreq, wsAttn, wsPhase, wsPort)
 
         attempt = 0
         while attempt <= self.max_retries:
@@ -213,7 +218,11 @@ class waveshaper(Device):
                 response = requests.post(url, data=jsonString, timeout=self.timeout)
                 if response.status_code == 200:
                     result = response.json()
-                    print(f"Upload succeeded: {result}")
+                    # print(f"Upload succeeded: {result}")
+
+                    from winsound import Beep
+                    Beep(800, 500)
+
                     return result
                 else:
                     print(f"Upload failed with status code: {response.status_code}")
@@ -228,6 +237,8 @@ class waveshaper(Device):
         else:
             print("Max retries reached. Upload failed.")
             return None
+        
+
 
     def plot_current_profile(self, unit='THz'):
         """Plot the current profile of the waveshaper.
@@ -256,17 +267,20 @@ class waveshaper(Device):
             wsPort (array): The port values.
             unit (str): The unit of the frequency values, either 'THz' or 'nm'.
         """
+        freq = wsFreq
         # Convert frequency to desired unit
         # Validate the unit
         if unit.lower() not in ['thz', 'nm']:
             self.error(self.devicename+": "+f"Given plot unit: '{unit}' is invalid. Please use 'THz' or 'nm'. "+" Not plotting.")
-    
-        if unit.lower() == 'nm':
-            plot_x = np.array([self.thz2nm(f) for f in freq])
-            plot_x_label = "Wavelength (nm)"
-        else:
-            plot_x = freq
-            plot_x_label = "Frequency (THz)"
+
+        def get_plot_x(freq, unit):
+            if unit.lower() == 'nm':
+                plot_x = np.array([self.thz2nm(f) for f in freq])
+                plot_x_label = "Wavelength (nm)"
+            else:
+                plot_x = freq
+                plot_x_label = "Frequency (THz)"
+            return plot_x, plot_x_label
 
         # Separate data by port
         port_data = self.separate_by_port(wsFreq, wsAttn, wsPhase, wsPort)
@@ -277,6 +291,7 @@ class waveshaper(Device):
         # Plot frequency vs attenuation
         plt.subplot(1, 2, 1)
         for port, (freq, attn, _) in port_data.items():
+            plot_x, plot_x_label = get_plot_x(freq, unit)
             plt.plot(plot_x, -attn, label=f'Port {port}', linestyle='-')
         plt.xlabel(plot_x_label)
         plt.ylabel('-Attenuation (dB)')
@@ -286,6 +301,7 @@ class waveshaper(Device):
         # Plot frequency vs phase
         plt.subplot(1, 2, 2)
         for port, (freq, _, phase) in port_data.items():
+            plot_x, plot_x_label = get_plot_x(freq, unit)
             plt.plot(plot_x, phase, label=f'Port {port}', linestyle='-')
         plt.xlabel(plot_x_label)
         plt.ylabel('Phase (Degrees)')
@@ -310,11 +326,11 @@ class waveshaper(Device):
         unique_ports = np.unique(wsPort)
 
         for port in unique_ports:
-            indices = np.where(wsPort == port)
+            indices = [i for i, p in enumerate(wsPort) if p == port]
             port_data[port] = (
-                wsFreq[indices],
-                wsAttn[indices],
-                wsPhase[indices]
+                np.array([wsFreq[i] for i in indices]).flatten(), 
+                np.array([wsAttn[i] for i in indices]).flatten(),
+                np.array([wsPhase[i] for i in indices]).flatten()
             )
 
         return port_data
@@ -410,6 +426,47 @@ class waveshaper(Device):
 
     def __thz2nm(self, thz):
         return waveshaper.c_const / thz / 1000
+    
+    #### Maodong added
+    def get_2nd_disper_lambda(self, d2, center=1560, centerunit='nm'):
+        # d2 in ps/nm
+        if centerunit.lower() == 'nm':
+            center = self.__nm2thz(center) # Always convert to THz
+        beta2 = (waveshaper.c_const / center)**2 / (2*np.pi*waveshaper.c_const) * (d2 * 1e-3)
+        return lambda thz: beta2 * ((thz - center) * 2*np.pi)**2 / 2
+
+    def get_3rd_disper_lambda(self, d2, d3, center=1560, centerunit='nm'):
+        # d2 in ps/nm, d3 in ps/nm^2
+        if centerunit.lower() == 'nm':
+            center = self.__nm2thz(center)
+        beta2 = (waveshaper.c_const / center)**2 / (2*np.pi*waveshaper.c_const) * (d2 * 1e-3)
+        beta3 = (waveshaper.c_const)**2 / (4*np.pi*np.pi*center**4)*(d3*1e-6)
+        return lambda thz: beta2 * ((thz - center) * 2*np.pi)**2 / 2 + beta3 * ((thz - center) * 2*np.pi)**3 / 6
+    
+    def get_bandpass_lambda(self, center=192.175, span=0.1, unit='thz', passband_atten = 0):
+        passband_atten = np.max([0, passband_atten])
+        if unit.lower() == 'nm':
+            startthz = self.__nm2thz(center + span/2)
+            stopthz = self.__nm2thz(center - span/2)
+            center = (startthz + stopthz) / 2 
+            span = stopthz - startthz
+        startf = center - span/2
+        stopf = center + span/2
+        return lambda thz: passband_atten if (thz>startf and thz<stopf) else self.MAX_ATTEN
+
+    def set_bandpass(self, center=192.175, span=0.1, unit='thz', port=1, passband_atten=0):
+        bandpass = self.get_bandpass_lambda(center=center, span=span, unit=unit, passband_atten=passband_atten)
+        wsFreq = self.wsFreq
+        wsAttn = np.array([bandpass(f) for f in wsFreq])
+        wsPhase = np.zeros(len(wsFreq))
+        wsPort = np.array([int(port) for _ in wsFreq])
+        try:
+            self.upload_profile(wsAttn, wsPhase, wsPort, plot=False)
+        finally:
+            return wsFreq, wsAttn, wsPhase, wsPort
+
+            
+    #### Maodong added finish
     
 class Waveshaper(waveshaper): # For backwards compatibility with the old naming convention
     def __init__(self, *args, **kwargs):
