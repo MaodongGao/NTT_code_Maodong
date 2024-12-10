@@ -236,6 +236,16 @@ class YokogawaOSA(Device):
             self.error(f'{self.devicename}: Failed to initiate single mode. Error: {e}')
             raise
 
+    def single_and_wait(self):
+        '''Initiate a single sweep and wait for it to complete.'''
+        self.single()
+        self.wait_sweep()
+
+    def run_and_wait(self, trace_to_write=None):
+        '''Initiate a repeat sweep and wait for the first sweep to complete.'''
+        self.run(trace_to_write)
+        self.wait_sweep()
+
     def stop(self):
         try:
             self.write(":ABORt")
@@ -243,6 +253,25 @@ class YokogawaOSA(Device):
         except Exception as e:
             self.error(f'{self.devicename}: Failed to stop operation. Error: {e}')
             raise
+
+    def get_operation_status_register(self):
+        try:
+            flag = int(self.query(":STATUS:OPERATION:CONDITION?"))
+        except Exception as e:
+            self.error(f'{self.devicename}: Failed to get operation status register. Error: {e}')
+        a = flag // 16 # Auto Sweep: Completion of auto sweep running action
+        b = (flag - a*16) // 8 # Cal: Completion of a Cal wavelength calibration or resolution calibration
+        c = (flag - a*16 - b*8) // 4 # File: Completion of file operation
+        d = (flag - a*16 - b*8 - c*4) // 2 # Program: Completion of execution of the program functions
+        e = flag - a*16 - b*8 - c*4 - d*2 # Sweep: Completion of a sweep
+        return {'Auto Sweep': a, 'Cal': b, 'File': c, 'Program': d, 'Sweep': e}
+
+    def wait_sweep(self):
+        while True:
+            status = self.get_operation_status_register()
+            if status['Sweep']:
+                break
+            time.sleep(1)
 
     def display_trace(self, trace):
         """Display the specified trace."""
