@@ -10,7 +10,7 @@ import time
 C_CONST = 299792458  # Speed of light in m/s
 
 class YokogawaOSA(Device):
-    def __init__(self, addr="192.168.1.23", # 'GPIB0::1::INSTR'
+    def __init__(self, addr="192.168.1.27", # 'GPIB0::1::INSTR'
                   name="OSA"):
        
 
@@ -273,8 +273,45 @@ class YokogawaOSA(Device):
                 break
             time.sleep(1)
 
+    def get_trace_status(self, trace):
+        """Get the status of the specified trace."""
+        try:
+            trace = self._validate_trace(trace)
+            dp = self.query(f":TRAC:STAT:TR{trace}?") # Display='1', Blank='0'
+            wr = self.query(f":TRAC:ATTR:TR{trace}?") # Write='0', Fix='1'
+            dp = True if dp == '1' else False
+            wr = True if wr == '0' else False
+            return {'Display': dp, 'Write': wr, 'Blank': not dp, 'Fix': not wr}
+        except Exception as e:
+            self.error(f'{self.devicename}: Failed to get trace status for trace {trace}. Error: {e}')
+            raise
+
     def display_trace(self, trace):
         """Display the specified trace."""
+        if "".join([x for x in trace if x.isalpha()]).lower().strip().startswith('allbut'):
+            try:
+                allbut = "".join([x for x in trace if x.isalpha()]).lower().strip().replace('allbut', '').strip()
+                allbut = [self._validate_trace(t) for t in allbut]
+                for t in self.__available_traces:
+                    if t not in allbut:
+                        self.display_trace(t)
+                    else:
+                        self.blank_trace(t)
+                self.info(f'{self.devicename}: All traces are displayed except {allbut}')
+                return
+            except Exception as e:
+                self.error(f'{self.devicename}: Failed to display all traces except {allbut}. Error: {e}')
+                raise
+            
+        if trace.lower().strip() == 'all':
+            try:
+                for t in self.__available_traces:
+                    self.display_trace(t)
+                self.info(f'{self.devicename}: All traces are displayed.')
+                return
+            except Exception as e:
+                self.error(f'{self.devicename}: Failed to display all traces. Error: {e}')
+
         try:
             trace = self._validate_trace(trace)
             self.write(f":TRAC:STAT:TR{trace} ON")
@@ -285,6 +322,30 @@ class YokogawaOSA(Device):
 
     def blank_trace(self, trace):
         """Blank the specified trace."""
+        if "".join([x for x in trace if x.isalpha()]).lower().strip().startswith('allbut'):
+            try:
+                allbut = "".join([x for x in trace if x.isalpha()]).lower().strip().replace('allbut', '').strip()
+                allbut = [self._validate_trace(t) for t in allbut]
+                for t in self.__available_traces:
+                    if t not in allbut:
+                        self.blank_trace(t)
+                    else:
+                        self.display_trace(t)
+                self.info(f'{self.devicename}: All traces are blanked except {allbut}')
+                return
+            except Exception as e:
+                self.error(f'{self.devicename}: Failed to blank all traces except {allbut}. Error: {e}')
+                raise
+        
+        if trace.lower().strip() == 'all':
+            try:
+                for t in self.__available_traces:
+                    self.blank_trace(t)
+                self.info(f'{self.devicename}: All traces are blanked.')
+                return
+            except Exception as e:
+                self.error(f'{self.devicename}: Failed to blank all traces. Error: {e}')
+
         try:
             trace = self._validate_trace(trace)
             self.write(f":TRAC:STAT:TR{trace} OFF")
@@ -305,6 +366,21 @@ class YokogawaOSA(Device):
 
     def fix_trace(self, trace):
         """Fix the specified trace."""
+        if "".join([x for x in trace if x.isalpha()]).lower().strip().startswith('allbut'):
+            try:
+                allbut = "".join([x for x in trace if x.isalpha()]).lower().strip().replace('allbut', '').strip()
+                allbut = [self._validate_trace(t) for t in allbut]
+                for t in self.__available_traces:
+                    if t not in allbut:
+                        self.fix_trace(t)
+                    else:
+                        self.write_trace(t)
+                self.info(f'{self.devicename}: All traces are written except {allbut}')
+                return
+            except Exception as e:
+                self.error(f'{self.devicename}: Failed to write all traces except {allbut}. Error: {e}')
+                raise
+
         try:
             trace = self._validate_trace(trace)
             self.write(f"TRAC:ATTR:TR{trace} FIX")
@@ -347,6 +423,29 @@ class YokogawaOSA(Device):
             return result
         except Exception as e:
             self.error(f'{self.devicename}: Failed to get Y data for trace {trace}. Error: {e}')
+            raise
+
+    def peak_search(self, trace, adv_marker=1):
+        """Search for peaks in the specified trace."""
+        try:
+            trace = self._validate_trace(trace)
+            # self.display_trace(trace)
+            flag = False
+            if not self.get_trace_status(trace)['Display']:
+                self.display_trace(trace)
+                flag = True
+            self.wait_sweep()
+            self.write(f":CALC:AMAR{adv_marker}:TRAC TR{trace}")
+            self.write(f":CALC:AMAR{adv_marker} 1")
+            self.write(f":CALC:AMAR{adv_marker}:MAX")
+            wl = float(self.query(f":CALC:AMAR{adv_marker}:X?"))
+            pr = float(self.query(f":CALC:AMAR{adv_marker}:Y?"))
+            self.info(f'{self.devicename}: Peak search is performed on trace {trace}, X: {wl}, Y: {pr}.')
+            if flag:
+                self.blank_trace(trace)
+            return wl, pr
+        except Exception as e:
+            self.error(f'{self.devicename}: Failed to perform peak search on trace {trace}. Error: {e}')
             raise
 
     def get_trace(self, trace, plot=True, filename=None, logdata=False):

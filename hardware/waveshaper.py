@@ -9,7 +9,7 @@ from .device import Device
 class waveshaper(Device):
     c_const = 299792458  # Speed of light in m/s
 
-    def __init__(self, addr="192.168.1.22", name='wsp', isVISA=False):
+    def __init__(self, addr="192.168.1.7", name='wsp', isVISA=False):
         super().__init__(addr, name, isVISA)
         config = {
             "ip": self.addr,

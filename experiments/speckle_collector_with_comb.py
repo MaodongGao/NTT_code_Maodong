@@ -30,10 +30,10 @@ class SpeckleCollectorWithComb:
         self.ws = ws
 
         self.bpf_bw_thz = 0.02 # Bandwidth of the bandpass filter in THz
-        self.comb_fsr_ghz = 50 # Comb FSR in GHz
-        self.comb_reference_wl_nm = 1557.605 # Comb reference wavelength in nm
-        self.comb_min_wl_nm = 1548.122 # Comb minimum wavelength in nm
-        self.comb_max_wl_nm = 1575.000 # Comb maximum wavelength in nm
+        self.comb_fsr_ghz = 25 # 50 # Comb FSR in GHz
+        self.comb_reference_wl_nm = 1557.547 # 1557.605 # Comb reference wavelength in nm
+        self.comb_min_wl_nm = 1527 # 1548.122 # Comb minimum wavelength in nm
+        self.comb_max_wl_nm = 1563 # 1575.000 # Comb maximum wavelength in nm
 
         # TODO: dynamic atten not implemented yet
         self.comb_spectrum = [0 for _ in self.comb_center_freq_thz] # Power(dBm) of every comb line
@@ -97,7 +97,8 @@ class SpeckleCollectorWithComb:
     def scan_pattern(self, 
                      thz_list= None, # list of THz frequencies to scan
                      filename=None,
-                     callback=None # callback function to be called after each image is captured
+                     callback=None, # callback function to be called after each image is captured
+                     get_bandpass_atten_func=None # function to get the bandpass attenuation
                     ):
         if thz_list is None:
             thz_list = self.comb_center_freq_thz
@@ -132,7 +133,10 @@ class SpeckleCollectorWithComb:
             time.sleep(0.5)
             try:
                 # atten = np.max([0, -self.max_input_power_dB + self.comb_spectrum[ii]])
-                atten = 0
+                if get_bandpass_atten_func is not None:
+                    atten = get_bandpass_atten_func(freq_thz)
+                else:
+                    atten = 0
                 images[freq_thz] = self.collect_thz_pattern(freq_thz, passband_atten=atten).flatten().tolist()
             except TimeoutError:
                 self.warning(f"Failed to collect image centered at {freq_thz} THz")
