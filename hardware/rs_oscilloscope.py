@@ -134,3 +134,121 @@ class RsOSC(Device):
     def set_vertical_position_div(self, channel: int, position: float):
         self.write(f"CHANnel{channel}:POSition {position:.4f}")
         self.info(f"Vertical position of channel {channel} set to {position:.4f} div")
+
+    def get_acquisition_state(self):
+        return self.query("ACQuire:STATE?") # Can be 'RUN' | 'STOP' | 'COMP' | 'BRE'
+    
+    def single(self):
+        self.write("SINGle")
+        self.info("Single acquisition started")
+
+    def run(self):
+        self.write("RUN")
+        self.info("Continuous acquisition started")
+    
+    def stop(self):
+        self.write("STOP")
+        self.info("Acquisition stopped")
+
+    def single_and_wait(self):
+        self.single()
+        while self.get_acquisition_state() != 'COMP':
+            time.sleep(0.1)
+        self.info("Single acquisition completed")
+
+    def get_horizontal_scale_sec(self):
+        return float(self.query("TIMebase:SCALe?"))
+    
+    def get_horizontal_position_sec(self):
+        return float(self.query("TIMebase:POSition?"))
+    
+    def set_horizontal_scale_sec(self, scale: float):
+        self.write(f"TIMebase:SCALe {scale:.4e}")
+        self.info(f"Horizontal scale set to {scale:.4e} s/div, 12 divs {scale*12:.4e} sec total")
+    
+    def set_horizontal_position_sec(self, position: float):
+        self.write(f"TIMebase:POSition {position:.4e}")
+        self.info(f"Horizontal position set to {position:.4e} sec")
+
+    def set_channel_type(self, channel: int, ctype: str):
+        if ctype.strip().upper() not in ['SAMP', 'PDET', 'HRES']:
+            self.error(f"Invalid channel type {ctype}. Should be 'SAMP', 'PDET', or 'HRES'")
+            return
+        self.write(f"CHANnel{channel}:TYPE {ctype}")
+        self.info(f"Channel {channel} type set to {ctype}")
+
+    def high_resolution_mode(self, channel: int = 0):
+        if channel == 0:
+            self.write("ACQuire:HRESolution AUTO")
+            self.info("Acquisition mode set to high resolution")
+        else:
+            self.set_channel_type(channel, 'HRES')
+
+    def get_digital_measurement(self, channel: int, measurement: str='DC'):
+        avilaible_measurements = ['DC', 'ACDC', 'ACRM']
+        # DC: mean, ACDC: AC+DC RMS, ACRM: AC RMS
+        measurement = measurement.strip().upper()
+        if measurement not in avilaible_measurements:
+            self.error(f"Invalid measurement {measurement}. Should be one of {avilaible_measurements}")
+            return
+        self.write(f"DVM{channel}:ENABle ON")
+        self.write(f"DVM{channel}:SOURce CH{channel}")
+        self.write(f"DVM{channel}:TYPE {measurement}")
+        # result = float(self.query(f"DVM{channel}:RESult?"))
+        temp = self.query(f"DVM{channel}:RESult:STATus?")
+        result = float(temp.split(',')[0])
+        status = temp[-1]
+        # Bit 0 = 1: result is valid
+        # ● Bit 1 = 1: no result available
+        # ● Bit 2 = 1: clipping occurs
+        # ● Bit 3 = 1: no period found
+        # convert status to binary str
+        status = bin(int(status))[2:]
+        # fill with zeros to 4 bits
+        status = status.zfill(4)
+        self.info(f"Digital measurement of channel {channel} ({measurement}) is {result}, status: {status}")
+        return {'result': result, 
+                'valid': status[3] == '1',
+                'no_result': status[2] == '1',
+                'clipping': status[1] == '1',
+                'no_period': status[0] == '1'}
+
+    def get_digital_mean(self, channel: int):
+        return self.get_digital_measurement(channel, 'DC')['result']
+    
+    def check_clipped(self, channel: int):
+        return self.get_digital_measurement(channel, 'DC')['clipping']
+    
+    def auto_vertical_scale(self, channel: int):
+        num_checks = 5
+        for _ in range(num_checks):
+            mean_meas = self.get_digital_measurement(channel)
+            if mean_meas['clipping']:
+                num_retries = 10
+                ii = 0
+                while mean_meas['clipping'] and ii < num_retries:
+                    new_scale = round(mean_meas['result'] / 10 * 2, 3)
+                    if mean_meas['result'] < 0:
+                        self.set_vertical_position_div(channel, 4.9)
+                        self.set_vertical_scale_volt(channel, -new_scale)
+                    else:
+                        self.set_vertical_position_div(channel, -4.9)
+                        self.set_vertical_scale_volt(channel, new_scale)
+                    self.single_and_wait()
+                    mean_meas = self.get_digital_measurement(channel)
+                    ii += 1
+                self.run()
+            else:
+                continue
+        return
+
+    def get_sample_points(self):
+        return int(self.query("ACQuire:POINts?"))
+    
+    def set_sample_points(self, points: int):
+        self.write(f"ACQuire:POINts {points}")
+        self.info(f"Number of sample points set to {self.get_sample_points()}")
+
+    def auto_sample_points(self):
+        self.write("ACQuire:POINts:AUTO ON")
+        self.info(f"Auto sample points enabled, number of sample points is {self.get_sample_points()}")

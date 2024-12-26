@@ -9,7 +9,7 @@ import matplotlib.animation as animation
 from matplotlib import rc
 from IPython.display import HTML
 import json
-
+import warnings
 # create union datatype of str and None
 from typing import Union
 
@@ -162,23 +162,26 @@ class DataprocessSpeckleImaging:
                 self.get_subimage_df(
                 self.get_lowerres_image_df(self.scaled_object_image, self.target_dim, self.effective_dim),
                 self.target_topleft[0], self.target_topleft[1], self.raw_dim, self.target_dim)
-                , 0.3).values
+                , 1.2).values
 
     # Get the used pattern for data processing
     def get_scaled_speckle_pattern_df(self, preprocess_fun = None,
                                 exp_scale: Union[float, None] = None,
-                                fraction_to_ignore: Union[float, None] = None) -> pd.DataFrame:
+                                fraction_to_ignore_min: Union[float, None] = None,
+                                fraction_to_ignore_max: Union[float, None] = None,) -> pd.DataFrame:
         if self.raw_pat_img is None:
             raise ValueError("Pattern image not loaded yet")
-        self.scaled_speckle_pattern = self.get_preprocessed_image_df(self.raw_pat_img, preprocess_fun, exp_scale, fraction_to_ignore)
+        self.scaled_speckle_pattern = self.get_preprocessed_image_df(self.raw_pat_img, preprocess_fun, exp_scale, fraction_to_ignore_min, fraction_to_ignore_max)
         return self.scaled_speckle_pattern
     
     def get_scaled_object_image_df(self, preprocess_fun = None,
                             exp_scale: Union[float, None] = None,
-                            fraction_to_ignore: Union[float, None] = None) -> pd.DataFrame:
+                            fraction_to_ignore_min: Union[float, None] = None,
+                            fraction_to_ignore_max: Union[float, None] = None,
+                            ) -> pd.DataFrame:
         if self.raw_obj_img is None:
             raise ValueError("Object image not loaded yet")
-        self.scaled_object_image = self.get_preprocessed_image_df(self.raw_obj_img, preprocess_fun, exp_scale, fraction_to_ignore)
+        self.scaled_object_image = self.get_preprocessed_image_df(self.raw_obj_img, preprocess_fun, exp_scale, fraction_to_ignore_min, fraction_to_ignore_max)
         return self.scaled_object_image
     
 
@@ -200,16 +203,24 @@ class DataprocessSpeckleImaging:
     
     def get_actual_pd_measurement(self,
                                   dark_voltage: float = 0.002,
+                                  preprocess_pd = lambda x: x
                                   ) -> np.ndarray:
         if self.raw_pat_pd is None:
             raise ValueError("Pattern callback not loaded yet")
         if self.raw_obj_pd is None:
             raise ValueError("Object callback not loaded yet")
-        return ((self.raw_obj_pd.values - dark_voltage) / (self.raw_pat_pd.values - dark_voltage)).flatten()
+        # return preprocess_pd(((self.raw_obj_pd.values - dark_voltage) / (self.raw_pat_pd.values - dark_voltage)).flatten())
         
-    def plt_compare_digitalsum_and_actualpd(self):
-        digital_sum = self.get_digital_sum_measurement()
-        actual_pd = self.get_actual_pd_measurement()
+        # need to return the mean of columns in raw_obj_pd and raw_pat_pd
+        return preprocess_pd(((self.raw_obj_pd.mean(axis=0).values - dark_voltage) / (self.raw_pat_pd.mean(axis=0).values - dark_voltage)).flatten())
+        
+    def plt_compare_digitalsum_and_actualpd(self,
+                                            bright_threshold: float = 0.3,
+                                            dark_voltage: float = 0.002,
+                                            preprocess_pd = lambda x: x,
+                                            ):
+        digital_sum = self.get_digital_sum_measurement(bright_threshold)
+        actual_pd = self.get_actual_pd_measurement(dark_voltage, preprocess_pd)
         plt.figure(figsize=(10,3))
         # plot to mean 1 for comparison
         plt.plot(self.wavelength_nm, digital_sum / np.mean(digital_sum), label="Digital Sum")
@@ -241,11 +252,11 @@ class DataprocessSpeckleImaging:
         digital_sum = self.get_digital_sum_measurement(bright_threshold)
         return self.pinv_reconstruction(self.speckle_pattern[selected_index], digital_sum[selected_index]).reshape(self.effective_dim)
 
-    def actual_pd_reconstruction_pinv(self, dark_voltage: float = 0.0, selected_index = None):
+    def actual_pd_reconstruction_pinv(self, dark_voltage: float = 0.0, selected_index = None, preprocess_pd = lambda x: x):
         if selected_index is None:
             # use all data
             selected_index = slice(None)
-        actual_pd = self.get_actual_pd_measurement(dark_voltage)
+        actual_pd = self.get_actual_pd_measurement(dark_voltage, preprocess_pd)
         return self.pinv_reconstruction(self.speckle_pattern[selected_index], actual_pd[selected_index]).reshape(self.effective_dim)
     
     def post_process_reconstruction(self, img: np.ndarray,
@@ -469,13 +480,15 @@ class DataprocessSpeckleImaging:
     def get_preprocessed_image_df(self, img_df: pd.DataFrame,
                                   preprocess_fun = None,
                                   exp_scale: Union[float, None] = None,
-                                  fraction_to_ignore: Union[float, None] = None,
+                                  fraction_to_ignore_min: Union[float, None] = None,
+                                  fraction_to_ignore_max: Union[float, None] = None,
                                   ) -> pd.DataFrame:
+        fraction_to_ignore = None if (fraction_to_ignore_min is None and fraction_to_ignore_max is None) else (0 if fraction_to_ignore_min is None else fraction_to_ignore_min, 0 if fraction_to_ignore_max is None else fraction_to_ignore_max)
         if preprocess_fun is None:
             if exp_scale is None and fraction_to_ignore is None:
                 preprocess_fun = self.preprocess_image
             elif fraction_to_ignore is not None:
-                preprocess_fun = lambda img: self.preprocess_image(img, fraction_to_ignore=fraction_to_ignore)
+                preprocess_fun = lambda img: self.preprocess_image(img, fraction_to_ignore_min=fraction_to_ignore[0], fraction_to_ignore_max=fraction_to_ignore[1])
             elif exp_scale is not None:
                 preprocess_fun = lambda img: self.preprocess_image(img, exp_scale=exp_scale)
         else:
@@ -501,8 +514,19 @@ class DataprocessSpeckleImaging:
                                   fraction_to_ignore_min: float = 100/(256*256), # typically 100 pixels to ignore for 256x256 image
                                   fraction_to_ignore_max: float = 100/(256*256), 
                                   ) -> np.ndarray:
-        img = img - np.partition(img, int(fraction_to_ignore_min*len(img)))[int(fraction_to_ignore_min*len(img))]
-        img = img / np.partition(img, -int(fraction_to_ignore_max*len(img)))[-int(fraction_to_ignore_max*len(img))]
+        len_img = len(img.flatten()) if isinstance(img, np.ndarray) else len(img)
+        if not np.isclose(fraction_to_ignore_min, 0):
+            img = img - np.partition(img.flatten() if isinstance(img, np.ndarray) else img
+                                     , int(fraction_to_ignore_min*len_img))[int(fraction_to_ignore_min*len_img)]
+        else:
+            warnings.warn("fraction_to_ignore_min is 0, no minimum value clipping is done")
+        if not np.isclose(fraction_to_ignore_max, 0):
+            # return (np.partition(img, -int(fraction_to_ignore_max*len(img)))[-int(fraction_to_ignore_max*len(img))])
+            img = img / np.partition(img.flatten() if isinstance(img, np.ndarray) else img
+                                     , -int(fraction_to_ignore_max*len_img))[-int(fraction_to_ignore_max*len_img)]
+        else:
+            img = img / np.max(img.flatten() if isinstance(img, np.ndarray) else img)
+            warnings.warn("fraction_to_ignore_max is 0, no maximum value clipping is done")
         img = np.clip(img, 0, 1)
         return img
 

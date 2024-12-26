@@ -30,7 +30,7 @@ class SpeckleCollectorWithComb:
         self.ws = ws
 
         self.bpf_bw_thz = 0.02 # Bandwidth of the bandpass filter in THz
-        self.comb_fsr_ghz = 25 # 50 # Comb FSR in GHz
+        self.comb_fsr_ghz = 25 #25 # 50 # Comb FSR in GHz
         self.comb_reference_wl_nm = 1557.547 # 1557.605 # Comb reference wavelength in nm
         self.comb_min_wl_nm = 1527 # 1548.122 # Comb minimum wavelength in nm
         self.comb_max_wl_nm = 1563 # 1575.000 # Comb maximum wavelength in nm
