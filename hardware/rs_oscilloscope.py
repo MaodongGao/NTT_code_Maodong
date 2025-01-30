@@ -135,6 +135,14 @@ class RsOSC(Device):
         self.write(f"CHANnel{channel}:POSition {position:.4f}")
         self.info(f"Vertical position of channel {channel} set to {position:.4f} div")
 
+    def get_vertical_offset_volt(self, channel: int):
+        return float(self.query(f"CHANnel{channel}:OFFSet?"))
+    
+    def set_vertical_offset_volt(self, channel: int, offset: float):
+        self.write(f"CHANnel{channel}:OFFSet {offset:.4f}")
+        self.info(f"Vertical offset of channel {channel} set to {offset:.4f} V")
+
+
     def get_acquisition_state(self):
         return self.query("ACQuire:STATE?") # Can be 'RUN' | 'STOP' | 'COMP' | 'BRE'
     
@@ -210,8 +218,8 @@ class RsOSC(Device):
         return {'result': result, 
                 'valid': status[3] == '1',
                 'no_result': status[2] == '1',
-                'clipping': status[1] == '1',
-                'no_period': status[0] == '1'}
+                'clipping': status[0] == '1', # NEED TO CHECK!!!
+                'no_period': status[1] == '1'}
 
     def get_digital_mean(self, channel: int):
         return self.get_digital_measurement(channel, 'DC')['result']
@@ -224,7 +232,7 @@ class RsOSC(Device):
         for _ in range(num_checks):
             mean_meas = self.get_digital_measurement(channel)
             if mean_meas['clipping']:
-                num_retries = 10
+                num_retries = 12
                 ii = 0
                 while mean_meas['clipping'] and ii < num_retries:
                     new_scale = round(mean_meas['result'] / 10 * 2, 3)
@@ -240,6 +248,7 @@ class RsOSC(Device):
                 self.run()
             else:
                 continue
+            
         return
 
     def get_sample_points(self):

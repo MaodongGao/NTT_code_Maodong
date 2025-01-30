@@ -6,7 +6,7 @@ class KeysightFG(Device):
 
     def __init__(
         self,
-        addr="TCPIP::192.168.1.19::INSTR",
+        addr="TCPIP::192.168.1.20::INSTR",
         name="Keysight Function Generator",
         isVISA=True,
     ):

@@ -82,6 +82,9 @@ class SpeckleCollectorWithComb:
 
         self.ws.upload_profile(wsAtten, wsPhase, wsPort, plot=False)
 
+    def pass_one_comb_line(self, num: int, passband_atten: float = 0):
+        self.ws.set_bandpass(center=self.comb_center_freq_thz[num], span=self.bpf_bw_thz, unit='THz', passband_atten=passband_atten)
+
     def collect_thz_pattern(self, freq_thz: float, save_log: bool = False, passband_atten: float = 0):
         self.ws.set_bandpass(center=freq_thz, span=self.bpf_bw_thz, unit='THz', passband_atten=passband_atten)
         import time
@@ -104,8 +107,13 @@ class SpeckleCollectorWithComb:
             thz_list = self.comb_center_freq_thz
             
         if filename is not None:
+            # First need to prepare the file directory which is one level up
+            dirname_handler_2 = DirnameHandler(os.path.dirname(filename)).prepare()
+            self.info(dirname_handler_2)
+
             dirname_handler = DirnameHandler(filename).prepare()
             self.info(dirname_handler)
+
 
             extensions = ['.csv', '.json']
             for ext in extensions: self.info(FilenameHandler(filename).prepare(ext))

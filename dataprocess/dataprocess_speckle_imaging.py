@@ -210,7 +210,7 @@ class DataprocessSpeckleImaging:
         if self.raw_obj_pd is None:
             raise ValueError("Object callback not loaded yet")
         # return preprocess_pd(((self.raw_obj_pd.values - dark_voltage) / (self.raw_pat_pd.values - dark_voltage)).flatten())
-        
+
         # need to return the mean of columns in raw_obj_pd and raw_pat_pd
         return preprocess_pd(((self.raw_obj_pd.mean(axis=0).values - dark_voltage) / (self.raw_pat_pd.mean(axis=0).values - dark_voltage)).flatten())
         
@@ -313,9 +313,21 @@ class DataprocessSpeckleImaging:
             raise ValueError("Object image not get by get_scaled_object_image_df() yet")
         plt.imshow(self.get_i_th_image_from_df(self.scaled_object_image, i, dim), cmap='gray')
         plt.title(f"The {i}th object image at {self.wavelength_nm[i]} nm")
+        # plt.show()
+
+    def plt_i_th_speckle_pattern_raw(self, i: int, dim: Union[Tuple[int, int], None] = None):
+        if self.raw_pat_img is None:
+            raise ValueError("Pattern image not loaded yet")
+        plt.imshow(self.get_i_th_image_from_df(self.raw_pat_img, i, dim), cmap='gray')
+        plt.title(f"The {i}th raw speckle pattern at {self.wavelength_nm[i]} nm")
+        # plt.show()
+
+    def plt_i_th_object_image_raw(self, i: int, dim: Union[Tuple[int, int], None] = None):
+        if self.raw_obj_img is None:
+            raise ValueError("Object image not loaded yet")
+        plt.imshow(self.get_i_th_image_from_df(self.raw_obj_img, i, dim), cmap='gray')
+        plt.title(f"The {i}th raw object image at {self.wavelength_nm[i]} nm")
         plt.show()
-
-
 
 
 
@@ -346,7 +358,9 @@ class DataprocessSpeckleImaging:
         ax[1].imshow(self.get_i_th_image_from_df(pat_df, i, dim), cmap='jet', alpha = 0.5)
 
         # calculate correlation
-        corr = objimg_df.iloc[:, i].corr(pat_df.iloc[:, i])
+        obj_mask = self.get_bright_value_mask_from_image_df(objimg_df, bright_threshold)
+        corr = objimg_df[obj_mask].iloc[:, i].corr(pat_df[obj_mask].iloc[:, i])
+
         ax[1].set_title(f"Overlayed (Correlation: {corr:.2f})")
         
         plt.show()
